@@ -63,11 +63,13 @@ import Network
             let request = try JSONDecoder().decode(ModelBridgeRequest.self, from: body)
             guard request.prompt.count <= 2000 else { throw BlueError.invalidValue }
             let store = try LibraryStore(inMemory: true, seed: false)
-            try store.update(undoable: false) { $0 = request.library }
+            try store.update { $0 = request.library }
             let assistant = AssistantService()
+            assistant.selectSurface(request.surface ?? "all", day: request.selectedDay)
             if let id = request.collectionID { assistant.selectCollection(id, store: store) }
-            if let id = request.noteID { assistant.selectNote(id) }
             if let id = request.previousRecord { assistant.selectRecord(id) }
+            if let id = request.noteID { assistant.selectNote(id) }
+            if let id = request.eventID { assistant.selectEvent(id) }
             assistant.input = request.prompt
             assistant.submit(store: store, alarms: AlarmService(), language: request.language)
             let deadline = ContinuousClock.now.advanced(by: .seconds(85))

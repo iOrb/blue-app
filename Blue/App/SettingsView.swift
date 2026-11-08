@@ -11,7 +11,7 @@ struct SettingsButton: View {
             Image(systemName: "slider.horizontal.3").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }
         .accessibilityLabel(l("settings.title")).accessibilityIdentifier("settingsButton")
-        .sheet(isPresented: $showing) { NavigationStack { SettingsView() } }
+        .blueSheet(isPresented: $showing, title: l("settings.title")) { SettingsView() }
     }
 }
 
@@ -35,7 +35,7 @@ struct SettingsView: View {
     @State private var error: String?
     var body: some View {
         @Bindable var l = l
-        Form {
+        List {
             Section(l("settings.language")) {
                 Button {
                     l.language = .english
@@ -67,19 +67,13 @@ struct SettingsView: View {
                         exporting = true
                     } catch { self.error = BlueError.saveFailed.key }
                 }
-                Button(l("undo")) {
-                    do { try store.undo() } catch { self.error = BlueError.saveFailed.key }
-                }.disabled(!store.canUndo)
+
                 ErrorLine(key: error)
             }
             Section { Text(l("settings.systemLanguage")).font(.footnote).foregroundStyle(.secondary) }
         }
+        .listStyle(.plain)
         .navigationTitle(l("settings.title")).navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                QuietButton(key: "close", symbol: "xmark") { dismiss() }.accessibilityIdentifier("settingsClose")
-            }
-        }
         .fileExporter(
             isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Blue-export-v2"
         ) { result in

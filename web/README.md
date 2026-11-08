@@ -20,12 +20,12 @@ For genuine AI, create an ignored `.dev.vars` file containing `BLUE_MODEL_BRIDGE
 
 ## Data and behavior
 
-- New libraries start empty. Notes render Markdown and have manual editors. Collections start as simple lists; Blue can adapt fields and indicators.
+- New libraries start empty. Notes show only their titles in the overview and render Markdown when opened. Collections start as simple lists; Blue can adapt fields and indicators.
 - Local storage keeps the web library on this browser. Export and restore version-2 JSON backups from Settings. This does not sync with native SwiftData or another browser. Dates use Apple's Codable reference epoch (2001-01-01).
 - The entire web library snapshot is sent through the authenticated Site to the Mac model for each AI request. Inference runs on the Mac. Public enrichment can send public topic titles to Wikipedia. The gateway does not log prompts or library contents.
-- AI changes are validated before applying them. Concurrent library edits invalidate a pending response. Removing populated fields requires review; Undo retains the last ten changes during the current session.
+- AI changes are validated before applying them. Concurrent library edits invalidate a pending response. Removing fields and deleting content requires confirmation. There is no Undo history.
 - Enter sends, Shift+Enter inserts a newline, and tapping outside chat dismisses it while preserving the draft. Browser speech recognition is used where supported; otherwise use keyboard dictation.
-- Notes and item editor drafts survive closing and reopening the editor within the tab. Their cache is scoped by item revision so a saved model edit takes precedence over an old draft.
+- Tap titles and rendered Markdown to edit; valid changes save immediately. Navigation shows Notes, Collections, Calendar and Blue. Filters appear only inside a collection. The calendar plus creates an event, and a day opens its agenda in a sheet.
 - The Mac and temporary preview tunnel must remain running. This is a testing connection, not an always-on service. Missing model connectivity is shown explicitly.
 - Home Screen metadata is included. There is no offline service worker, native alarm scheduling, or device synchronization.
 

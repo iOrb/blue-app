@@ -26,11 +26,9 @@ enum BlueMigrationPlan: SchemaMigrationPlan {
 @Observable
 final class LibraryStore {
     private(set) var state: LibraryState
-    private(set) var canUndo = false
     let container: ModelContainer
     private let context: ModelContext
     private var entities: [String: BlueSchemaV1.StoredItem] = [:]
-    private var undoStates: [LibraryState] = []
 
     init(inMemory: Bool = false, url: URL? = nil, seed: Bool = true) throws {
         let schema = Schema(versionedSchema: BlueSchemaV1.self)
@@ -53,6 +51,8 @@ final class LibraryStore {
             case "collection": state.collections.append(try decoder.decode(Collection.self, from: row.payload))
             case "record": state.records.append(try decoder.decode(Record.self, from: row.payload))
             case "note": state.notes.append(try decoder.decode(Note.self, from: row.payload))
+            case "event":
+                state.events = (state.events ?? []) + [try decoder.decode(CalendarEvent.self, from: row.payload)]
             case "alarm": state.alarms.append(try decoder.decode(SavedAlarm.self, from: row.payload))
             default: break
             }
@@ -108,6 +108,7 @@ final class LibraryStore {
         try encode(state.records, kind: "record")
         try encode(state.notes, kind: "note")
         try encode(state.alarms, kind: "alarm")
+        try encode(state.events ?? [], kind: "event")
         for (key, value) in payloads {
             if let entity = entities[key] {
                 if entity.payload != value { entity.payload = value }
@@ -129,26 +130,61 @@ final class LibraryStore {
         }
     }
 
-    func update(undoable: Bool = true, _ mutation: (inout LibraryState) throws -> Void) throws {
+    func update(_ mutation: (inout LibraryState) throws -> Void) throws {
         var next = state
         try mutation(&next)
         try persist(next)
-        if undoable {
-            undoStates.append(state)
-            if undoStates.count > 10 { undoStates.removeFirst() }
-        }
         state = next
-        canUndo = !undoStates.isEmpty
     }
 
-    func undo() throws {
-        guard var previous = undoStates.last else { return }
-        // System alarms cannot be undone by restoring local data.
-        previous.alarms = state.alarms
-        try persist(previous)
-        state = previous
-        undoStates.removeLast()
-        canUndo = !undoStates.isEmpty
+    func saveEvent(_ event: CalendarEvent, expectedRevision: Int?) throws {
+        try Validation.event(event)
+        try update { state in
+            var events = state.events ?? []
+            var saved = event
+            if let index = events.firstIndex(where: { $0.id == event.id }) {
+                guard events[index].revision == expectedRevision else { throw BlueError.staleRevision }
+                saved.revision = events[index].revision + 1
+                events[index] = saved
+            } else {
+                guard expectedRevision == nil, saved.revision == 0 else { throw BlueError.staleRevision }
+                events.append(saved)
+            }
+            state.events = events
+        }
+    }
+
+    func confirmDeletion(_ pending: PendingDeletion) throws {
+        try update { state in
+            switch pending.kind {
+            case "record":
+                guard let revision = pending.revision,
+                    state.records.first(where: { $0.id == pending.id })?.revision == revision
+                else { throw BlueError.staleRevision }
+                state.records.removeAll { $0.id == pending.id }
+            case "note":
+                guard let revision = pending.revision,
+                    state.notes.first(where: { $0.id == pending.id })?.revision == revision
+                else { throw BlueError.staleRevision }
+                state.notes.removeAll { $0.id == pending.id }
+            case "event":
+                guard let revision = pending.revision,
+                    state.events?.first(where: { $0.id == pending.id })?.revision == revision
+                else { throw BlueError.staleRevision }
+                state.events?.removeAll { $0.id == pending.id }
+            case "collection":
+                guard let collection = pending.collection, let revisions = pending.recordRevisions,
+                    state.collections.first(where: { $0.id == pending.id }) == collection,
+                    Dictionary(
+                        uniqueKeysWithValues: state.records.filter { $0.collectionID == pending.id }.map {
+                            ($0.id, $0.revision)
+                        }) == revisions
+                else { throw BlueError.staleRevision }
+                state.records.removeAll { $0.collectionID == pending.id }
+                state.collections.removeAll { $0.id == pending.id }
+            default: throw BlueError.invalidValue
+            }
+        }
     }
 
     func record(_ id: UUID) -> Record? { state.records.first { $0.id == id } }
@@ -214,6 +250,13 @@ final class LibraryStore {
     }
 
     func saveNote(_ note: Note, expectedRevision: Int?) throws {
+        if note.title.key == nil {
+            try Validation.title(note.title.english)
+            try Validation.title(note.title.spanish)
+        }
+        guard note.markdown.english.count <= 20_000, note.markdown.spanish.count <= 20_000 else {
+            throw BlueError.invalidValue
+        }
         try update { state in
             var saved = note
             saved.updatedAt = Date()

@@ -1,11 +1,11 @@
 # Blue
 
-A quiet home for Markdown notes, adaptable collections, and system alarms. This repository starts with the native iPhone app, built with SwiftUI, SwiftData, Foundation Models and AlarmKit, and leaves room for future platforms. English and Spanish (Spain). Your library and inference stay local; optional public facts come from Wikipedia with source links.
+A quiet home for Markdown notes, adaptable collections, and a calendar. This repository starts with the native iPhone app, built with SwiftUI, SwiftData, Foundation Models and AlarmKit, and leaves room for future platforms. English and Spanish (Spain). Your library and inference stay local; optional public facts come from Wikipedia with source links.
 
 <p>
   <img src="docs/screenshots/library-en.png" width="230" alt="Blue library in English">
   <img src="docs/screenshots/custom-indicators.png" width="230" alt="Custom visual indicators in collection rows and filters">
-  <img src="docs/screenshots/calendar-en.png" width="230" alt="Blue calendar">
+  <img src="docs/screenshots/compact-calendar-es.png" width="230" alt="Blue calendar">
 </p>
 
 ## Run locally
@@ -34,9 +34,9 @@ The normal test suite uses isolated demo data, Swift Testing business/persistenc
 
 ## Try it
 
-Start with a note or an empty collection, or tell Blue what to save. Existing demo collections remain editable. Use the plus button for a note, collection, item or alarm. Collections gain useful typed properties through conversation. Ask for a 🗿 “Bass” indicator or a 🚬 collection icon. The same icons work in rows, detail and filters. Saved notes open as rendered Markdown; tap the pencil to edit. Change language in Settings without losing an open draft. Export your library as versioned JSON from Settings.
+Start with a note or an empty collection, or tell Blue what to save. Existing collections remain editable. Bottom navigation opens Notes, Collections, Calendar or Blue. The brand opens the combined view, with the calendar below the notes. Use the plus button for a note, collection, item or calendar event. Collections gain useful typed properties through conversation. Ask Blue to add indicators with your own meaning, icon and color, or to change a collection icon. The same icons work in rows, detail and filters. Saved notes open as rendered Markdown; tap the content to edit; valid changes save automatically. Change language in Settings without losing an open draft. Export your library as versioned JSON from Settings.
 
-With Apple Intelligence ready, ask “What rating did I give Interstellar?”, jump to the exact row, then ask “Change Interstellar's rating to 10.” Blue validates and saves through the same store used by the editors. Without a local model, manual controls remain available and the assistant explains its availability.
+With Apple Intelligence ready, ask “What rating did I give Interstellar?”, see the exact saved values in the assistant sheet, then ask “Change Interstellar's rating to 10.” Blue validates and saves through the same store used by the editors. Without a local model, manual controls remain available and the assistant explains its availability. The iPhone 13 mini does not support Apple Intelligence; the private web preview can use the Mac model. All deletions require confirmation. There is no Undo control.
 
 ## Install on your iPhone
 

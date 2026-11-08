@@ -1,23 +1,15 @@
-# Design decisions
+# Design
 
-Current design, reviewed on 2026-11-08:
+Blue uses a white canvas in light appearance, large system typography, thin separators and compact text rows. Dark appearance follows the system. The reference is the owner's Blue Cuaderno Site; native and web share its spacious, unboxed layout.
 
-- [Apple lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables): use short text rows and reveal complete information in a dedicated editor. Preserve readable widths instead of compressing properties into desktop columns.
-- [Apple Notes](https://support.apple.com/en-us/118442): retain familiar search and direct note creation. Blue uses a flat library of notes and collections, with no folder hierarchy or predefined collection templates.
-- [Craft](https://www.craft.do/): use restrained typography, content as the primary surface, and structured collections within a notes product. Avoid its broader workspace/task vocabulary for this release.
-- [ThatPet](https://thatpet.app/): the useful principle is distinct reactions for listening, thinking, searching, working and completion. Blue's original character is drawn with SwiftUI paths and uses different eyes, arm poses and a search gesture; it does not reuse ThatPet artwork.
-- [Apple Device Hub](https://developer.apple.com/documentation/xcode/managing-your-simulated-and-physical-devices-in-device-hub): Xcode 27 replaces the older standalone Simulator UI with Device Hub. The simulator runtime and simctl still provide reproducible build/test/install commands.
+Bottom navigation contains Notes, Collections, Calendar and the Blue character. Tapping the brand opens the combined view: collections, then note titles, then calendar. There are no folders, breadcrumbs, global favorites filters or always-open chat composer. Collections show only their names and counts until opened; notes show only titles until opened.
 
-White/black system surfaces, secondary gray, and system typography handle both appearances. Blue identifies the character; custom indicators use their chosen accent color. Use system Liquid Glass for native navigation and restrained material for the assistant dock. Editors are pushed screens; only filters, property configuration and Settings need modal context. A modal has one close control.
+The Blue character opens a bottom sheet with a fixed heading, scrolling results and a fixed composer. Enter sends; microphone capture is explicit. Sheets have no close buttons: the backdrop, drag handle or accessibility escape dismisses them. Chat navigation remains reachable. Exact saved results appear in the sheet rather than automatically jumping to another screen.
 
-Status filters use choices, ratings use a minimum slider plus optional maximum, numeric fields use numeric bounds, booleans use the same visual indicators as rows and detail, dates use a native date picker, and text/tags use matching text. The collection shows active removable chips with their current values, plus overflow removal and Clear All. The collection options menu and icon filters stay in a compact strip above the list, with 44-point targets on compact phones. Sorting is independent of filters. Hearts mean Like, stars mean Favorite, and a number means Rating. Optional values stay absent until populated.
+Within a collection, shared property controls appear in rows, details and filters. Favorites use stars, likes use hearts; custom emoji/SF Symbols retain their own meaning and color. Inactive controls are pale gray, active controls colored. Existing watched/not-watched schemas display an eye: the inactive option is implicit. Status schemas can supply option icons and an inactive option. Numeric values open a scrolling number picker. Optional bounds/steps are stored with the field. Empty optional text properties are hidden in rows and remain available inside the item.
 
-At accessibility text sizes, number labels and values stack vertically, filter sheets use full height, and a native date picker replaces the crowded month grid. Accessibility requirements are enforced in AGENTS.md. Simulator screenshots and UI tests are recorded in `docs/verification.md`; a VoiceOver listening pass and real-device interaction remain distinct from automated accessibility audits.
+Tap titles or content to edit. Valid changes save immediately, without an edit icon or Save action. Notes and written item content open as rendered Markdown and enter text editing on tap. Collection schema adaptation is handled by Blue, with no manual Add Indicator or template picker. Deleting entities and removing fields requires confirmation; there is no Undo history or button.
 
-## Current interaction direction
+Calendar plus creates an ordinary event. Tapping a day opens its agenda in a sheet, not a section below the grid. Events have a title, local date/time or all-day date, and color. These events do not ring. Actual ringing alarms remain a separate AlarmKit capability.
 
-The latest user decision is notes and collections only. Notes open in rendered Markdown with a pencil action for editing. Collections are ordered item lists that adapt through conversation; the creation form has no domain templates. Existing folder data is migrated without losing content.
-
-Library scopes use recognizable icons. Each collection indicator has a user-defined meaning, symbol/emoji and color; it uses the same component in list rows, detail and filters. Inactive indicators are pale gray, selected indicators show their color. Filters such as Favorite are the star itself, with a second tap removing the filter. All populated fields remain visible rather than hiding everything after the first two properties.
-
-The assistant input is a single-line send field, with a microphone action and resumable reply. Enter sends. Tapping outside or switching tabs collapses the chat and dismisses its keyboard without clearing the draft. Native manual controls remain available when the model or speech assets are unavailable.
+App-owned native strings resolve through the English/Spanish string catalog. User-authored titles/content remain unchanged when switching language. Controls support accessibility labels, touch targets, Reduce Motion and system appearance. Visual and automated checks are recorded in verification.md; physical-device checks remain separate.

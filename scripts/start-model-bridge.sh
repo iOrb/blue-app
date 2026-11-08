@@ -8,7 +8,7 @@ fi
 xcrun swiftc -O -parse-as-library -swift-version 6 -strict-concurrency=complete \
   Blue/Domain/*.swift Blue/Data/LibraryStore.swift Blue/Localization/Localizer.swift \
   Blue/Services/AssistantService.swift Blue/Services/CollectionQueryTool.swift \
-  Blue/Services/AdaptiveCollectionTools.swift Blue/Services/PublicFactsService.swift Blue/Services/ModifyCollectionTool.swift \
+  Blue/Services/AdaptiveCollectionTools.swift Blue/Services/PublicFactsService.swift Blue/Services/ModifyCollectionTool.swift Blue/Services/SemanticLibraryTools.swift \
   Blue/Services/SimulatorModelBridge.swift scripts/model-bridge-mac.swift -o .build/blue-model-bridge
 python3 scripts/prepare-model-resources.py .build
 umask 077

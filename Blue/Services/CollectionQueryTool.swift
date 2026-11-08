@@ -101,7 +101,7 @@ struct CreateNoteTool: Tool {
         guard arguments.markdown.count <= 20_000 else { throw BlueError.invalidValue }
         let note = Note(
             title: .user(arguments.title),
-            markdown: .user(MarkdownRequest.preservingFormat(arguments.markdown, prompt: context.sourcePrompt)))
+            markdown: .user(arguments.markdown))
         try context.store.saveNote(note, expectedRevision: nil)
         context.didMutate = true
         context.result = .notes([note.id])

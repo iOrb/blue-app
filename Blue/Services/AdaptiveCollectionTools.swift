@@ -7,9 +7,10 @@ extension CreateCollectionTool.ProposedField {
         return FieldDefinition(
             id: id, label: .bilingual(english, spanish), kind: kind,
             options: kind == .status
-                ? options.map { FieldOption(id: $0.id, label: .bilingual($0.english, $0.spanish)) } : [],
+                ? options.map { FieldOption(id: $0.id, label: .bilingual($0.english, $0.spanish), icon: $0.icon) } : [],
             showInRow: true,
-            icon: icon, tint: tint.flatMap { IndicatorTint(rawValue: $0.rawValue) })
+            icon: icon, tint: tint.flatMap { IndicatorTint(rawValue: $0.rawValue) }, inactiveOptionID: inactiveOptionID,
+            minimum: minimum, maximum: maximum, step: step)
     }
 }
 
@@ -79,13 +80,9 @@ struct CaptureItemTool: Tool {
         var collection = matches.first ?? Collection(title: .user(arguments.collectionName), fields: [])
         let originalCollection = matches.first
         let proposedFields = try arguments.fields.map { try $0.validated() }
-        for var field in proposedFields {
+        for field in proposedFields {
             if ["title", "markdown", "notes", "note", "name", "titulo", "nombre"].contains(field.id.lowercased()) {
                 continue
-            }
-            if !context.sourcePrompt.lowercased().contains("icon") {
-                field.icon = nil
-                field.tint = nil
             }
             if let existing = collection.fields.first(where: { $0.id == field.id }) {
                 guard existing.kind == field.kind else { throw BlueError.invalidValue }
@@ -106,29 +103,10 @@ struct CaptureItemTool: Tool {
             guard let field = collection.fields.first(where: { $0.id == input.fieldID }) else { continue }
             let value = try input.decoded(field: field)
             try Validation.field(field, value: value)
-            if !context.sourcePrompt.isEmpty {
-                if case .text(let text) = value, !context.sourcePrompt.localizedCaseInsensitiveContains(text) {
-                    continue
-                }
-                if case .number(let number) = value,
-                    !UserValueEvidence.contains(number: number, in: context.sourcePrompt)
-                {
-                    continue
-                }
-            }
             record.values[field.id] = value
             if field.kind == .favorite { record.favorite = value.flag }
         }
-        if !context.sourcePrompt.isEmpty {
-            if !arguments.markdown.isEmpty && !context.sourcePrompt.localizedCaseInsensitiveContains(arguments.markdown)
-            {
-                record.markdown = .user("")
-            }
-            collection.fields.removeAll { field in
-                !(originalCollection?.fields.contains { $0.id == field.id } ?? false) && record.values[field.id] == nil
-            }
-        }
-        if PublicLookupIntent.allowed(prompt: context.sourcePrompt, collectionName: arguments.collectionName) {
+        if arguments.lookupPublicFacts && context.publicLookupAllowed {
             // Failed lookups leave the user's capture intact; no factual text is fabricated.
             record.sources = try? await context.lookup(arguments.title)
         }
@@ -179,25 +157,10 @@ struct AdaptItemTool: Tool {
             }
             let value = try input.decoded(field: field)
             try Validation.field(field, value: value)
-            if !context.sourcePrompt.isEmpty {
-                let evidence =
-                    context.sourcePrompt + " "
-                    + (context.fetchedSources.isEmpty ? record.sources ?? [] : context.fetchedSources).map(\.summary)
-                    .joined(separator: " ")
-                if case .text(let text) = value, !evidence.localizedCaseInsensitiveContains(text) {
-                    throw BlueError.invalidValue
-                }
-                if case .number(let number) = value, !UserValueEvidence.contains(number: number, in: evidence) {
-                    throw BlueError.invalidValue
-                }
-            }
             record.values[field.id] = value
             if field.kind == .favorite { record.favorite = value.flag }
         }
-        let asksForWriting = [
-            "markdown", "written note", "personal note", "nota escrita", "comentario", "apunte", "texto",
-        ].contains { context.sourcePrompt.localizedCaseInsensitiveContains($0) }
-        if let markdown = arguments.markdown, asksForWriting || context.sourcePrompt.isEmpty {
+        if let markdown = arguments.markdown {
             guard markdown.count <= 20_000 else { throw BlueError.invalidValue }
             record.markdown = .user(markdown)
         }
@@ -226,6 +189,7 @@ struct LookupPublicFactsTool: Tool {
     func call(arguments: Arguments) async throws -> String { try await perform(arguments) }
     @MainActor private func perform(_ arguments: Arguments) async throws -> String {
         try context.check()
+        guard context.publicLookupAllowed else { throw BlueError.permissionDenied }
         guard let id = UUID(uuidString: arguments.recordID), context.readRevisions[id] != nil,
             let record = context.store.record(id)
         else { throw BlueError.ambiguous }

@@ -87,7 +87,7 @@ final class AlarmService {
             saved.revision += 1
             saved.timeZoneID = TimeZone.current.identifier
             do {
-                try store.update(undoable: false) { state in
+                try store.update { state in
                     if let index = state.alarms.firstIndex(where: { $0.id == input.id }) {
                         state.alarms[index] = saved
                     } else {
@@ -108,7 +108,7 @@ final class AlarmService {
         var disabled = alarm
         disabled.enabled = false
         try await save(disabled)
-        try store.update(undoable: false) { $0.alarms.removeAll { $0.id == alarm.id } }
+        try store.update { $0.alarms.removeAll { $0.id == alarm.id } }
     }
 
     func reconcile(timeZone: TimeZone = .current, now: Date = Date()) {
@@ -138,7 +138,7 @@ final class AlarmService {
                 }
             }
             if !updates.isEmpty {
-                try store.update(undoable: false) { state in
+                try store.update { state in
                     for index in state.alarms.indices {
                         if let update = updates[state.alarms[index].id] { state.alarms[index] = update }
                     }

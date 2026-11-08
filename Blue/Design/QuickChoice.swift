@@ -75,12 +75,10 @@ struct IndicatorControl: View {
                 ItemGlyph(symbol: field.indicatorSymbol)
                     .symbolVariant(selected ? .fill : .none)
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.7))
-                    .saturation(selected ? 1 : 0).opacity(selected ? 1 : 0.7)
+                    .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.3))
+
                     .frame(width: 44, height: 44)
-                    .background(
-                        selected ? field.indicatorColor.opacity(0.1) : Color.primary.opacity(0.035),
-                        in: RoundedRectangle(cornerRadius: 14))
+
                 if showsLabel { Text(l.text(field.label)).font(.subheadline).foregroundStyle(.primary) }
             }.contentShape(Rectangle())
         }.buttonStyle(.borderless).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()).accessibilityLabel(
@@ -92,46 +90,190 @@ struct IndicatorControl: View {
     }
 }
 
+extension FieldDefinition {
+    /// Compatibility for saved starter schemas. New schemas carry their own display metadata.
+    var inactiveStatus: String? {
+        inactiveOptionID
+            ?? options.first { ["wantWatch", "wantPlay", "wantTry", "wantVisit", "wantExplore"].contains($0.id) }?.id
+    }
+    func symbol(for option: FieldOption) -> String {
+        if let icon = option.icon { return icon }
+        switch option.id {
+        case "watched": return "eye"
+        case "watching", "playing": return "play"
+        case "finished", "tried": return "checkmark.circle"
+        case "visited": return "mappin"
+        case "exploring": return "music.note"
+        default: return indicatorSymbol
+        }
+    }
+    var numberOptions: [Double] {
+        let lower = minimum ?? 0
+        let upper = maximum ?? (kind == .rating ? 10 : 100)
+        let increment = step ?? (kind == .rating ? 0.5 : 1)
+        guard lower.isFinite, upper.isFinite, increment > 0, upper >= lower else { return [] }
+        return (0...min(1000, Int((upper - lower) / increment))).map { lower + Double($0) * increment }
+    }
+}
+
+struct PropertyControl: View {
+    let field: FieldDefinition
+    let value: FieldValue?
+    var filter = false
+    var save: (FieldValue?) -> Void
+    @Environment(Localizer.self) private var l
+    @State private var showing = false
+    var body: some View {
+        Group {
+            if field.kind.isBoolean {
+                IndicatorControl(field: field, selected: value?.flag == true) { save(.flag(!(value?.flag ?? false))) }
+            } else if field.kind == .status {
+                HStack(spacing: 0) {
+                    ForEach(field.options.filter { $0.id != field.inactiveStatus }) { option in
+                        let selected = value?.text == option.id
+                        Button {
+                            save(
+                                selected
+                                    ? (filter ? nil : field.inactiveStatus.map(FieldValue.option)) : .option(option.id))
+                        } label: {
+                            ItemGlyph(symbol: field.symbol(for: option)).font(.system(size: 20))
+                                .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.3))
+                                .frame(minWidth: 44, minHeight: 44)
+                        }.buttonStyle(.plain).accessibilityLabel(l.text(option.label))
+                            .accessibilityValue(l(selected ? "yes" : "no"))
+                            .accessibilityIdentifier("option-\(field.id)-\(option.id)")
+                    }
+                }
+            } else {
+                Button {
+                    showing = true
+                } label: {
+                    Group {
+                        if field.kind == .number || field.kind == .rating {
+                            Text(value?.number.map(l.number) ?? "—").font(.title3.weight(.medium)).monospacedDigit()
+                        } else if value != nil {
+                            Text(l.value(value, field: field)).font(.subheadline).lineLimit(2)
+                        } else {
+                            ItemGlyph(symbol: field.indicatorSymbol).foregroundStyle(.tertiary)
+                        }
+                    }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(l.text(field.label))
+                    .accessibilityValue(l.value(value, field: field)).accessibilityIdentifier("property-\(field.id)")
+            }
+        }
+        .blueSheet(isPresented: $showing, title: l.text(field.label)) {
+            VStack(alignment: .leading, spacing: 20) {
+                if field.kind == .rating || field.kind == .number {
+                    Picker(
+                        l.text(field.label),
+                        selection: Binding(get: { value?.number ?? field.minimum ?? 0 }, set: { save(.number($0)) })
+                    ) {
+                        ForEach(field.numberOptions, id: \.self) { number in Text(l.number(number)).tag(number) }
+                    }.pickerStyle(.wheel).labelsHidden().accessibilityIdentifier("numberWheel")
+                } else if field.kind == .date {
+                    DatePicker(
+                        l.text(field.label),
+                        selection: Binding(
+                            get: {
+                                if case .date(let date) = value { return date }
+                                return Date()
+                            }, set: { save(.date($0)) }), displayedComponents: .date
+                    ).datePickerStyle(.graphical)
+                } else {
+                    TextField(
+                        l.text(field.label),
+                        text: Binding(
+                            get: { value?.text ?? "" },
+                            set: { text in
+                                save(
+                                    text.isEmpty
+                                        ? nil
+                                        : field.kind == .tags
+                                            ? .tags(
+                                                text.split(separator: ",").map {
+                                                    $0.trimmingCharacters(in: .whitespaces)
+                                                }) : .text(text))
+                            }), axis: .vertical
+                    ).lineLimit(3...12)
+                }
+                if value != nil {
+                    Button(l("filters.clear")) {
+                        save(nil)
+                        showing = false
+                    }.frame(minHeight: 44)
+                }
+                Spacer()
+            }.padding(.horizontal, 24)
+        }
+    }
+}
+
 struct RecordIndicators: View {
     let record: Record
     let collection: Collection
     var interactive = false
+    var includeFavorite = true
     @Environment(LibraryStore.self) private var store
-    @Environment(Localizer.self) private var l
     @Environment(NavigationState.self) private var navigation
-    private var fields: [FieldDefinition] {
-        [collection.fields.first { $0.kind == .favorite } ?? .favoriteIndicator]
-            + collection.fields.filter { $0.kind.isBoolean && $0.kind != .favorite }
-    }
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 8)], alignment: .leading, spacing: 8)
-        {
-            ForEach(fields) { field in
-                let selected = field.kind == .favorite ? record.isFavorite : record.values[field.id]?.flag == true
-                if interactive {
-                    IndicatorControl(field: field, selected: selected) { toggle(field) }
-                        .accessibilityIdentifier(
-                            field.kind == .favorite
-                                ? "favorite-\(record.title)" : "indicator-\(record.title)-\(field.id)")
-                } else {
-                    ItemGlyph(symbol: field.indicatorSymbol).symbolVariant(selected ? .fill : .none)
-                        .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.35))
-                        .saturation(selected ? 1 : 0).opacity(selected ? 1 : 0.5)
-                        .frame(width: 28, height: 28).accessibilityLabel(l.text(field.label))
-                }
+        let fields =
+            (includeFavorite ? [collection.fields.first { $0.kind == .favorite } ?? .favoriteIndicator] : [])
+            + collection.fields.filter {
+                $0.kind != .favorite && ($0.kind.isBoolean || $0.kind == .status || record.values[$0.id] != nil)
             }
+        PropertyFlow { controls(fields) }
+    }
+    @ViewBuilder private func controls(_ fields: [FieldDefinition]) -> some View {
+        ForEach(fields) { field in
+            PropertyControl(
+                field: field, value: field.kind == .favorite ? .flag(record.isFavorite) : record.values[field.id]
+            ) { value in
+                guard interactive, var fresh = store.record(record.id) else { return }
+                if field.kind == .favorite { fresh.favorite = value?.flag ?? false }
+                if field.id != "__favorite" { fresh.values[field.id] = value }
+                do { try store.saveRecord(fresh, expectedRevision: fresh.revision) } catch {
+                    navigation.noticeKey = (error as? BlueError ?? .saveFailed).key
+                }
+            }.disabled(!interactive)
         }
     }
-    private func toggle(_ field: FieldDefinition) {
-        guard var current = store.record(record.id) else { return }
-        do {
-            if field.kind == .favorite {
-                current.favorite = !current.isFavorite
-                if field.id != "__favorite" { current.values[field.id] = .flag(current.isFavorite) }
-            } else {
-                current.values[field.id] = .flag(!(current.values[field.id]?.flag ?? false))
+}
+
+struct PropertyFlow: Layout {
+    var spacing: CGFloat = 6
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 320
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
             }
-            try store.saveRecord(current, expectedRevision: current.revision)
-        } catch { navigation.noticeKey = (error as? BlueError ?? .saveFailed).key }
+            x += min(size.width, width) + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: width, height: y + rowHeight)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            view.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+            x += min(size.width, bounds.width) + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }

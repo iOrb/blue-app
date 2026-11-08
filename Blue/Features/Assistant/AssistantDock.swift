@@ -6,206 +6,211 @@ struct AssistantDock: View {
     @Environment(AlarmService.self) private var alarms
     @Environment(NavigationState.self) private var navigation
     @Environment(Localizer.self) private var l
+    @Environment(\.scenePhase) private var phase
     @FocusState private var focused: Bool
     @State private var dictation = DictationService()
-    @Environment(\.scenePhase) private var phase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var event: CalendarEvent?
     var body: some View {
         @Bindable var assistant = assistant
         VStack(spacing: 0) {
-            if navigation.assistantExpanded, let result = assistant.result {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top) {
-                        resultView(result).frame(maxWidth: .infinity, alignment: .leading)
-                        QuietButton(key: "close", symbol: "xmark") {
-                            navigation.assistantExpanded = false
-                            navigation.assistantFocused = false
-                            dictation.stop()
-                        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let result = assistant.result {
+                        resultView(result)
+                    } else {
+                        BlueCharacter(state: assistant.state).frame(maxWidth: .infinity).padding(.top, 40)
                     }
-                }
-                .padding(.leading, 20).padding(.trailing, 6).padding(.top, 8)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-            HStack(spacing: 6) {
-                Button {
-                    navigation.assistantExpanded.toggle()
-                } label: {
-                    BlueCharacter(
-                        state: dictation.recording || focused && !assistant.busy ? .listening : assistant.state)
-                }.buttonStyle(.plain).accessibilityLabel(l("assistant.showConversation"))
-                    .accessibilityIdentifier("assistantCharacter")
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 24)
+            }.scrollDismissesKeyboard(.interactively)
+            ErrorLine(key: dictation.errorKey).padding(.horizontal, 24)
+            HStack(spacing: 8) {
                 TextField(
                     l(dictation.recording ? "dictation.listening" : "assistant.placeholder"), text: $assistant.input
                 )
-                .font(.subheadline).focused($focused)
-                .submitLabel(.send).onSubmit(submit)
-                .accessibilityIdentifier("assistantInput")
-                if !assistant.busy {
-                    QuietButton(
-                        key: dictation.recording ? "dictation.stop" : "dictation.start",
-                        symbol: dictation.recording ? "stop.circle.fill" : "mic"
-                    ) {
-                        if dictation.recording {
-                            dictation.stop()
-                        } else {
-                            focused = false
-                            navigation.assistantExpanded = true
-                            let prefix = assistant.input.trimmingCharacters(in: .whitespacesAndNewlines)
-                            Task {
-                                await dictation.start(language: l.language) { text in
-                                    assistant.input = prefix.isEmpty ? text : prefix + " " + text
-                                }
+                .focused($focused).submitLabel(.send).onSubmit(submit).accessibilityIdentifier("assistantInput")
+                QuietButton(
+                    key: dictation.recording ? "dictation.stop" : "dictation.start",
+                    symbol: dictation.recording ? "stop.circle.fill" : "mic"
+                ) {
+                    if dictation.recording {
+                        dictation.stop()
+                    } else {
+                        focused = false
+                        let prefix = assistant.input
+                        Task {
+                            await dictation.start(language: l.language) {
+                                assistant.input = prefix.isEmpty ? $0 : prefix + " " + $0
                             }
                         }
-                    }.accessibilityIdentifier("assistantMicrophone")
-                }
+                    }
+                }.accessibilityIdentifier("assistantMicrophone")
                 if assistant.busy {
                     QuietButton(key: "cancel", symbol: "stop.circle") { assistant.cancel() }
-                } else if !assistant.input.isEmpty {
-                    QuietButton(key: "assistant.send", symbol: "arrow.up.circle.fill", action: submit)
-                        .accessibilityIdentifier("assistantSend")
+                } else {
+                    QuietButton(key: "assistant.send", symbol: "arrow.up.circle.fill", action: submit).disabled(
+                        assistant.input.isEmpty
+                    ).accessibilityIdentifier("assistantSend")
                 }
-            }.padding(.horizontal, 10).padding(.vertical, 2)
-            if let key = dictation.errorKey, navigation.assistantExpanded {
-                Text(l(key)).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.bottom, 10)
-            }
+            }.padding(.horizontal, 16).padding(.vertical, 8).background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, 18).padding(.bottom, 12)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 27))
-        .padding(.horizontal, 14).padding(.bottom, 8)
-        .onChange(of: focused) { _, value in
-            navigation.assistantFocused = value
-            if value { navigation.assistantExpanded = true }
+        .safeAreaInset(edge: .bottom, spacing: 0) { BlueNavigation() }
+        .onAppear { focused = navigation.assistantFocused }
+        .onDisappear {
+            dictation.stop()
+            navigation.assistantFocused = false
         }
-        .onChange(of: navigation.assistantFocused) { _, value in focused = value }
         .onChange(of: phase) { _, value in if value != .active { dictation.stop() } }
         .onChange(of: l.language) { _, _ in dictation.stop() }
-        .onDisappear { dictation.stop() }
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86), value: assistant.result)
+        .blueSheet(
+            isPresented: Binding(get: { event != nil }, set: { if !$0 { event = nil } }), title: l("event.title")
+        ) {
+            if let event { EventEditor(existing: event, date: event.date) }
+        }
     }
     private func submit() {
         dictation.stop()
         focused = false
-        navigation.assistantExpanded = true
         assistant.submit(store: store, alarms: alarms, language: l.language)
+    }
+    private func open(_ route: Route) {
+        navigation.path = [route]
+        navigation.assistantExpanded = false
     }
     @ViewBuilder private func resultView(_ result: AssistantResult) -> some View {
         switch result {
-        case .confirmCollectionChange(let change):
-            VStack(alignment: .leading, spacing: 10) {
-                Text(l("field.confirmMigration")).font(.subheadline)
-                let removed = change.original.fields.filter { old in
-                    !change.proposed.fields.contains { $0.id == old.id }
-                }
-                Text(removed.map { l.text($0.label) }.joined(separator: ", ")).font(.caption).foregroundStyle(
-                    .secondary)
-                Button(l("save"), role: .destructive) {
-                    do {
-                        guard store.collection(change.original.id) == change.original,
-                            Dictionary(
-                                uniqueKeysWithValues: store.records(in: change.original.id).map { ($0.id, $0.revision) }
-                            ) == change.revisions
-                        else { throw BlueError.staleRevision }
-                        try store.saveCollection(change.proposed)
-                        assistant.result = .collection(change.proposed.id)
-                    } catch { assistant.result = .message((error as? BlueError ?? .saveFailed).key) }
-                }.accessibilityIdentifier("confirmSchemaChange")
-            }.padding(.vertical, 10)
-        case .answer(let text):
-            Text(text).font(.subheadline).padding(.vertical, 10)
-        case .message(let key):
-            Text(l(key)).font(.subheadline).padding(.vertical, 10)
-        case .records(let ids, let edited):
-            VStack(alignment: .leading, spacing: 8) {
-                if ids.count > 1 { Text(l("assistant.chooseRecord")).font(.caption).foregroundStyle(.secondary) }
-                ForEach(ids.prefix(3), id: \.self) { id in
-                    if let record = store.record(id), let collection = store.collection(record.collectionID) {
-                        Button {
-                            assistant.selectRecord(record.id)
-                            navigation.jump(to: record, store: store, locale: l.locale)
-                            assistant.result = nil
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(record.title).font(.subheadline.weight(.semibold))
-                                    Text(l(edited ? "assistant.updated" : "assistant.goToRow")).font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if let rating = record.values["rating"]?.number {
-                                    Text(l.number(rating)).font(.title2.weight(.medium)).monospacedDigit()
-                                }
-                                Image(systemName: "arrow.up.right").font(.caption)
-                            }.contentShape(Rectangle())
-                        }.buttonStyle(.plain).accessibilityIdentifier("result-\(record.title)")
-                            .accessibilityHint(l.text(collection.title))
-                    }
-                }
-            }.padding(.vertical, 8)
-        case .collection(let id):
-            if let collection = store.collection(id) {
-                Button {
-                    navigation.tab = 0
-                    navigation.path = [.collection(id)]
-                    assistant.result = nil
-                } label: {
-                    Label(l.text(collection.title), systemImage: "arrow.up.right").font(.subheadline.weight(.medium))
-                }.padding(.vertical, 12).accessibilityIdentifier("resultCollection")
-            }
+        case .answer(let text): MarkdownView(text: .constant(text))
+        case .message(let key): Text(l(key))
+        case .records(let ids, _): records(ids)
+        case .notes(let ids): notes(ids)
+        case .events(let ids): events(ids)
+        case .selection(let selection):
+            if !selection.answer.isEmpty { Text(selection.answer) }
+            records(selection.records, fields: selection.fields)
+            notes(selection.notes)
+            events(selection.events)
+            ForEach(selection.collections, id: \.self) { collectionLink($0) }
+        case .collection(let id): collectionLink(id)
         case .collectionView(let id, let query):
             if let collection = store.collection(id) {
-                Button {
-                    navigation.queries[id] = query
-                    navigation.tab = 0
-                    navigation.path = [.collection(id)]
-                    assistant.result = nil
-                } label: {
-                    Label(l.text(collection.title), systemImage: "arrow.up.right").font(.subheadline.weight(.medium))
-                }.padding(.vertical, 12)
+                Text(l.text(collection.title)).font(.title2.weight(.semibold))
+                records(query.apply(to: store.records(in: id), fields: collection.fields, locale: l.locale).map(\.id))
             }
-        case .notes(let ids):
-            VStack(alignment: .leading) {
-                if ids.isEmpty { Text(l("assistant.noResults")) }
-                ForEach(ids.prefix(3), id: \.self) { id in
-                    if let note = store.state.notes.first(where: { $0.id == id }) {
-                        Button(l.text(note.title)) {
-                            navigation.tab = 0
-                            navigation.path = [.note(id)]
-                            assistant.result = nil
-                        }
-                    }
-                }
-            }.padding(.vertical, 10)
+        case .confirmCollectionChange(let change):
+            Text(l("field.confirmMigration"))
+            Text(
+                change.original.fields.filter { old in !change.proposed.fields.contains { $0.id == old.id } }.map {
+                    l.text($0.label)
+                }.joined(separator: ", ")
+            )
+            .foregroundStyle(.secondary)
+            confirmation {
+                guard store.collection(change.original.id) == change.original,
+                    Dictionary(uniqueKeysWithValues: store.records(in: change.original.id).map { ($0.id, $0.revision) })
+                        == change.revisions
+                else { throw BlueError.staleRevision }
+                try store.saveCollection(change.proposed)
+                assistant.result = .collection(change.proposed.id)
+            }
+        case .confirmDeletion(let pending):
+            Text(l("delete.confirm"))
+            confirmation {
+                try store.confirmDeletion(pending)
+                assistant.result = .message("deleted")
+            }
         case .alarms(let ids):
-            VStack(alignment: .leading) {
-                if ids.isEmpty { Text(l("calendar.noAlarms")) }
-                ForEach(ids.prefix(3), id: \.self) { id in
-                    if let alarm = store.state.alarms.first(where: { $0.id == id }) {
-                        Button {
-                            navigation.jump(to: alarm)
-                            assistant.result = nil
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text("\(l.time(alarm.date)) · \(alarm.title)")
-                                Text(l("assistant.showCalendar")).font(.caption)
-                            }
-                        }
-                    }
-                }
-            }.padding(.vertical, 10)
-        case .confirmAlarmDeletion(let id):
-            VStack(alignment: .leading) {
-                Text(l("alarm.confirmDelete")).font(.subheadline)
-                Button(l("delete"), role: .destructive) {
-                    Task {
-                        guard let alarm = store.state.alarms.first(where: { $0.id == id }) else { return }
-                        do {
-                            try await alarms.delete(alarm)
-                            assistant.result = .message("alarm.deleted")
-                        } catch { assistant.result = .message((error as? BlueError ?? .alarmFailed).key) }
-                    }
+            ForEach(ids, id: \.self) { id in
+                if let alarm = store.state.alarms.first(where: { $0.id == id }) {
+                    Button("\(l.time(alarm.date)) · \(alarm.title)") {
+                        navigation.jump(to: alarm)
+                        navigation.scope = "calendar"
+                        navigation.path = []
+                        navigation.assistantExpanded = false
+                    }.frame(minHeight: 44)
                 }
             }
+        case .confirmAlarmDeletion(let id):
+            Text(l("alarm.confirmDelete"))
+            Button(l("delete"), role: .destructive) {
+                Task {
+                    guard let alarm = store.state.alarms.first(where: { $0.id == id }) else { return }
+                    do {
+                        try await alarms.delete(alarm)
+                        assistant.result = .message("alarm.deleted")
+                    } catch { assistant.result = .message((error as? BlueError ?? .alarmFailed).key) }
+                }
+            }.frame(minHeight: 44)
+            Button(l("cancel")) { assistant.result = nil }.frame(minHeight: 44)
+        }
+    }
+    @ViewBuilder private func records(_ ids: [UUID], fields: [String] = []) -> some View {
+        ForEach(ids, id: \.self) { id in
+            if let record = store.record(id), let collection = store.collection(record.collectionID) {
+                Button {
+                    assistant.selectRecord(id)
+                    open(.record(id))
+                } label: {
+                    Text(record.title).font(.title3.weight(.semibold)).frame(
+                        maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }.buttonStyle(.plain).accessibilityIdentifier("result-\(record.title)")
+                let displayed = Collection(
+                    id: collection.id, title: collection.title,
+                    fields: fields.isEmpty ? collection.fields : collection.fields.filter { fields.contains($0.id) })
+                RecordIndicators(
+                    record: record, collection: displayed, interactive: true,
+                    includeFavorite: fields.isEmpty || fields.contains("__favorite")
+                        || collection.fields.contains { $0.kind == .favorite && fields.contains($0.id) })
+                if (fields.isEmpty || fields.contains("markdown")) && !l.text(record.markdown).isEmpty {
+                    MarkdownView(text: .constant(l.text(record.markdown)))
+                }
+                Divider()
+            }
+        }
+    }
+    @ViewBuilder private func notes(_ ids: [UUID]) -> some View {
+        ForEach(ids, id: \.self) { id in
+            if let note = store.state.notes.first(where: { $0.id == id }) {
+                Button {
+                    assistant.selectNote(id)
+                    open(.note(id))
+                } label: {
+                    Text(l.text(note.title)).font(.title3.weight(.semibold)).frame(minHeight: 44)
+                }.buttonStyle(.plain)
+                MarkdownView(text: .constant(l.text(note.markdown)))
+            }
+        }
+    }
+    @ViewBuilder private func events(_ ids: [UUID]) -> some View {
+        ForEach(ids, id: \.self) { id in
+            if let value = store.state.events?.first(where: { $0.id == id }) {
+                Button {
+                    event = value
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(value.title).font(.title3.weight(.medium))
+                        Text(l.date(value.date) + (value.allDay ? "" : " · " + l.time(value.date))).foregroundStyle(
+                            .secondary)
+                    }.frame(minHeight: 54)
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+    @ViewBuilder private func collectionLink(_ id: UUID) -> some View {
+        if let collection = store.collection(id) {
+            Button {
+                open(.collection(id))
+            } label: {
+                Label(l.text(collection.title), systemImage: "square.stack").font(.title3).frame(minHeight: 50)
+            }.buttonStyle(.plain)
+        }
+    }
+    private func confirmation(_ action: @escaping () throws -> Void) -> some View {
+        HStack {
+            Button(l("cancel")) { assistant.result = nil }.frame(minHeight: 44)
+            Spacer()
+            Button(l("delete"), role: .destructive) {
+                do { try action() } catch { assistant.result = .message((error as? BlueError ?? .saveFailed).key) }
+            }.frame(minHeight: 44).accessibilityIdentifier("confirmDeletion")
         }
     }
 }

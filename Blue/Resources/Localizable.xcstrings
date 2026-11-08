@@ -171,23 +171,6 @@
         }
       }
     },
-    "undo": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Undo last change"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deshacer último cambio"
-          }
-        }
-      }
-    },
     "expand": {
       "extractionState": "manual",
       "localizations": {
@@ -619,13 +602,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete this collection and its records? You can undo this in Settings."
+            "value": "Delete this collection and its items?"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Eliminar esta colección y sus registros? Puedes deshacerlo en Ajustes."
+            "value": "¿Eliminar esta colección y sus elementos?"
           }
         }
       }
@@ -704,13 +687,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete this item? You can undo this in Settings."
+            "value": "Delete this item?"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Eliminar este elemento? Puedes deshacerlo en Ajustes."
+            "value": "¿Eliminar este elemento?"
           }
         }
       }
@@ -1503,13 +1486,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete this note? You can undo this in Settings."
+            "value": "Delete this note?"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Eliminar esta nota? Puedes deshacerlo en Ajustes."
+            "value": "¿Eliminar esta nota?"
           }
         }
       }
@@ -2931,13 +2914,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delete this folder and everything inside it? You can undo this in Settings."
+            "value": "Delete this folder and its contents?"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Eliminar esta carpeta y todo su contenido? Puedes deshacerlo en Ajustes."
+            "value": "¿Eliminar esta carpeta y su contenido?"
           }
         }
       }
@@ -3397,6 +3380,182 @@
           "stringUnit": {
             "state": "translated",
             "value": "Amarillo"
+          }
+        }
+      }
+    },
+    "library.collections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collections"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colecciones"
+          }
+        }
+      }
+    },
+    "untitled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin título"
+          }
+        }
+      }
+    },
+    "event.new": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New event"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuevo evento"
+          }
+        }
+      }
+    },
+    "event.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evento"
+          }
+        }
+      }
+    },
+    "event.allDay": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All day"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo el día"
+          }
+        }
+      }
+    },
+    "event.noAlarm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendar only · no alarm"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo calendario · sin alarma"
+          }
+        }
+      }
+    },
+    "event.confirmDelete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this event?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar este evento?"
+          }
+        }
+      }
+    },
+    "delete.confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this item?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar este elemento?"
+          }
+        }
+      }
+    },
+    "deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminado"
+          }
+        }
+      }
+    },
+    "filters.clear": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        }
+      }
+    },
+    "app.name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
           }
         }
       }

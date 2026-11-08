@@ -8,7 +8,7 @@ import sys
 root = pathlib.Path(__file__).resolve().parent.parent
 errors = []
 known = set()
-identical_allowed = {"no"}
+identical_allowed = {"no", "app.name"}
 for path in (root / "Blue/Resources").glob("*.xcstrings"):
     catalog = json.loads(path.read_text())
     if catalog.get("sourceLanguage") != "en":

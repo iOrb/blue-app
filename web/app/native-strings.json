@@ -39,10 +39,6 @@
     "en": "No",
     "es": "No"
   },
-  "undo": {
-    "en": "Undo last change",
-    "es": "Deshacer último cambio"
-  },
   "expand": {
     "en": "Expand folder",
     "es": "Expandir carpeta"
@@ -144,8 +140,8 @@
     "es": "Eliminar colección"
   },
   "collection.confirmDelete": {
-    "en": "Delete this collection and its records? You can undo this in Settings.",
-    "es": "¿Eliminar esta colección y sus registros? Puedes deshacerlo en Ajustes."
+    "en": "Delete this collection and its items?",
+    "es": "¿Eliminar esta colección y sus elementos?"
   },
   "record.new": {
     "en": "New item",
@@ -164,8 +160,8 @@
     "es": "Eliminar elemento"
   },
   "record.confirmDelete": {
-    "en": "Delete this item? You can undo this in Settings.",
-    "es": "¿Eliminar este elemento? Puedes deshacerlo en Ajustes."
+    "en": "Delete this item?",
+    "es": "¿Eliminar este elemento?"
   },
   "field.text": {
     "en": "Text",
@@ -352,8 +348,8 @@
     "es": "Eliminar nota"
   },
   "note.confirmDelete": {
-    "en": "Delete this note? You can undo this in Settings.",
-    "es": "¿Eliminar esta nota? Puedes deshacerlo en Ajustes."
+    "en": "Delete this note?",
+    "es": "¿Eliminar esta nota?"
   },
   "settings.title": {
     "en": "Settings",
@@ -688,8 +684,8 @@
     "es": "Eliminar carpeta"
   },
   "folder.confirmDelete": {
-    "en": "Delete this folder and everything inside it? You can undo this in Settings.",
-    "es": "¿Eliminar esta carpeta y todo su contenido? Puedes deshacerlo en Ajustes."
+    "en": "Delete this folder and its contents?",
+    "es": "¿Eliminar esta carpeta y su contenido?"
   },
   "library.scope.all": {
     "en": "All",
@@ -798,5 +794,49 @@
   "color.yellow": {
     "en": "Yellow",
     "es": "Amarillo"
+  },
+  "library.collections": {
+    "en": "Collections",
+    "es": "Colecciones"
+  },
+  "untitled": {
+    "en": "Untitled",
+    "es": "Sin título"
+  },
+  "event.new": {
+    "en": "New event",
+    "es": "Nuevo evento"
+  },
+  "event.title": {
+    "en": "Event",
+    "es": "Evento"
+  },
+  "event.allDay": {
+    "en": "All day",
+    "es": "Todo el día"
+  },
+  "event.noAlarm": {
+    "en": "Calendar only · no alarm",
+    "es": "Solo calendario · sin alarma"
+  },
+  "event.confirmDelete": {
+    "en": "Delete this event?",
+    "es": "¿Eliminar este evento?"
+  },
+  "delete.confirm": {
+    "en": "Delete this item?",
+    "es": "¿Eliminar este elemento?"
+  },
+  "deleted": {
+    "en": "Deleted",
+    "es": "Eliminado"
+  },
+  "filters.clear": {
+    "en": "Clear",
+    "es": "Quitar"
+  },
+  "app.name": {
+    "en": "Blue",
+    "es": "Blue"
   }
 }

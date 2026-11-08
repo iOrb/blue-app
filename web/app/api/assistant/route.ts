@@ -58,10 +58,9 @@ export async function POST(request: Request) {
     };
     if (!validLibrary(result.library) || !result.result)
       throw new Error("invalid");
-    // Native inference does not own web-only calendar or import metadata.
+    // The browser owns its one-time import marker; calendar events are shared with native inference.
     result.library = {
       ...result.library,
-      events: body.library.events,
       imports: body.library.imports,
     };
     return Response.json(result, { headers });

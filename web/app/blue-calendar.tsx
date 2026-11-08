@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -16,43 +16,47 @@ import {
   uid,
 } from "./blue-model";
 import { agenda, dateKey, dateFromKey, monthDays } from "./blue-calendar-model";
-import { Sheet, words, useDraft } from "./blue-editors";
+import { Sheet, Confirm, words } from "./blue-ui";
 import { Symbol } from "./blue-icons";
-
 export function BlueCalendar({
   library,
   language,
   save,
   remove,
   openItem,
+  onSelectDay,
 }: {
   library: Library;
   language: Language;
-  save: (event: CalendarEvent) => boolean;
-  remove: (event: CalendarEvent) => void;
+  save: (e: CalendarEvent) => boolean;
+  remove: (e: CalendarEvent) => void;
   openItem: (id: string) => void;
+  onSelectDay?: (day: string) => void;
 }) {
-  const [day, setDay] = useState(() => dateKey(new Date()));
-  const [month, setMonth] = useState(() => new Date());
-  const [editing, setEditing] = useState<{ event?: CalendarEvent }>();
-  const t = (en: string, es: string) => words(language, en, es);
-  const days = monthDays(month, language);
-  const today = dateKey(new Date());
-  const entries = agenda(library, day, language);
+  const [month, setMonth] = useState(() => new Date()),
+    [day, setDay] = useState<string>(),
+    [editing, setEditing] = useState<{ event?: CalendarEvent; day: string }>();
+  const t = (en: string, es: string) => words(language, en, es),
+    days = monthDays(month, language),
+    today = dateKey(new Date());
+  const select = (d: string) => {
+    setDay(d);
+    onSelectDay?.(d);
+  };
   return (
     <section className="calendar" aria-label={t("Calendar", "Calendario")}>
       <div className="calendar-heading">
-        <h1>
+        <h2>
           {month.toLocaleDateString(language, {
             month: "long",
             year: "numeric",
           })}
-        </h1>
+        </h2>
         <button
-          className="text-button"
+          className="plain"
           onClick={() => {
-            setDay(today);
             setMonth(new Date());
+            select(today);
           }}
         >
           {t("Today", "Hoy")}
@@ -64,7 +68,7 @@ export function BlueCalendar({
             setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1, 12))
           }
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={19} />
         </button>
         <button
           className="icon-button"
@@ -73,13 +77,13 @@ export function BlueCalendar({
             setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1, 12))
           }
         >
-          <ChevronRight size={20} />
+          <ChevronRight size={19} />
         </button>
       </div>
       <div className="calendar-grid">
-        {days.slice(0, 7).map((date) => (
-          <span className="weekday" key={dateKey(date)}>
-            {date.toLocaleDateString(language, { weekday: "narrow" })}
+        {days.slice(0, 7).map((d) => (
+          <span className="weekday" key={dateKey(d)}>
+            {d.toLocaleDateString(language, { weekday: "narrow" })}
           </span>
         ))}
         {days.map((date) => {
@@ -88,13 +92,12 @@ export function BlueCalendar({
           return (
             <button
               key={key}
-              className={`calendar-day ${day === key ? "selected" : ""} ${today === key ? "today" : ""} ${date.getMonth() !== month.getMonth() ? "outside-month" : ""}`}
-              aria-label={`${date.toLocaleDateString(language, { dateStyle: "full" })}${count ? ` · ${count}` : ""}`}
-              aria-pressed={day === key}
-              onClick={() => {
-                setDay(key);
-                if (date.getMonth() !== month.getMonth()) setMonth(date);
-              }}
+              className={`calendar-day ${key === today ? "today" : ""} ${date.getMonth() !== month.getMonth() ? "outside-month" : ""}`}
+              aria-label={
+                date.toLocaleDateString(language, { dateStyle: "full" }) +
+                (count ? ` · ${count}` : "")
+              }
+              onClick={() => select(key)}
             >
               <span>{date.getDate()}</span>
               <i className={count ? "has-events" : ""} />
@@ -102,241 +105,222 @@ export function BlueCalendar({
           );
         })}
       </div>
-      <div className="section-label agenda-heading">
-        <h2>
-          {dateFromKey(day).toLocaleDateString(language, {
+      {day && (
+        <Sheet
+          title={dateFromKey(day).toLocaleDateString(language, {
             weekday: "long",
             day: "numeric",
-            month: "short",
+            month: "long",
           })}
-        </h2>
-        <button
-          className="icon-button selected"
-          aria-label={t("New event", "Nuevo evento")}
-          onClick={() => setEditing({})}
+          close={() => setDay(undefined)}
         >
-          <Plus size={22} />
-        </button>
-      </div>
-      <div className="agenda-list">
-        {entries.map((entry) => (
-          <button
-            className="agenda-entry"
-            key={entry.id}
-            onClick={() =>
-              entry.recordID
-                ? openItem(entry.recordID)
-                : setEditing({
-                    event: library.events!.find((e) => e.id === entry.eventID),
-                  })
-            }
-          >
-            <span
-              className="agenda-dot"
-              style={{ background: `var(--${entry.color})` }}
-            />
-            {entry.symbol ? (
-              <Symbol name={entry.symbol} size={19} />
-            ) : (
-              <span className="agenda-time">
-                {entry.allDay
-                  ? t("All day", "Todo el día")
-                  : new Date(
-                      (entry.date + 978307200) * 1000,
-                    ).toLocaleTimeString(language, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-              </span>
-            )}
-            <span>
-              <strong>{entry.title}</strong>
-              {entry.detail && <small>{entry.detail}</small>}
-            </span>
-            <ChevronRight size={17} />
-          </button>
-        ))}
-        {!entries.length && (
-          <div className="calendar-empty">
-            <CalendarDays size={25} />
-            <span>{t("Nothing planned", "Sin planes")}</span>
+          <div className="agenda-top">
+            <button
+              className="round-dark"
+              aria-label={t("New event", "Nuevo evento")}
+              onClick={() => setEditing({ day })}
+            >
+              <Plus size={21} />
+            </button>
           </div>
-        )}
-      </div>
+          {agenda(library, day, language).map((entry) => (
+            <button
+              className="agenda-entry"
+              key={entry.id}
+              onClick={() =>
+                entry.recordID
+                  ? openItem(entry.recordID)
+                  : setEditing({
+                      day,
+                      event: library.events?.find(
+                        (e) => e.id === entry.eventID,
+                      ),
+                    })
+              }
+            >
+              <span
+                className="agenda-dot"
+                style={{ background: `var(--${entry.color})` }}
+              />
+              {entry.symbol ? (
+                <Symbol name={entry.symbol} size={19} />
+              ) : (
+                <span className="agenda-time">
+                  {entry.allDay
+                    ? t("All day", "Todo el día")
+                    : new Date(
+                        (entry.date + 978307200) * 1000,
+                      ).toLocaleTimeString(language, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                </span>
+              )}
+              <strong>{entry.title}</strong>
+              <ChevronRight size={16} />
+            </button>
+          ))}
+          {!agenda(library, day, language).length && (
+            <div className="calendar-empty">
+              <CalendarDays size={24} />
+              <span>{t("Nothing planned", "Sin planes")}</span>
+            </div>
+          )}
+        </Sheet>
+      )}
       {editing && (
         <EventEditor
-          key={`${editing.event?.id || day}:${editing.event?.revision || 0}`}
+          key={editing.event?.id || editing.day}
           event={editing.event}
-          day={day}
+          day={editing.day}
           language={language}
+          save={save}
+          remove={remove}
           close={() => setEditing(undefined)}
-          save={(event) => {
-            if (save(event)) {
-              setDay(
-                event.allDay
-                  ? event.day!
-                  : dateKey(new Date((event.date + 978307200) * 1000)),
-              );
-              setMonth(dateFromKey(event.day!));
-              setEditing(undefined);
-              return true;
-            }
-            return false;
-          }}
-          remove={(event) => {
-            remove(event);
-            setEditing(undefined);
-          }}
         />
       )}
     </section>
   );
 }
-function EventEditor({
+export function EventEditor({
   event,
   day,
   language,
-  close,
   save,
   remove,
+  close,
 }: {
   event?: CalendarEvent;
   day: string;
   language: Language;
-  close: () => void;
   save: (e: CalendarEvent) => boolean;
   remove: (e: CalendarEvent) => void;
+  close: () => void;
 }) {
-  const t = (en: string, es: string) => words(language, en, es);
   const date = event ? new Date((event.date + 978307200) * 1000) : new Date();
-  const [draft, setDraft, clear] = useDraft(
-    `blue.draft.event.${event?.id || day}.${event?.revision || 0}`,
-    {
-      title: event?.title || "",
-      day: event?.day || (event ? dateKey(date) : day),
-      time: event
-        ? `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
-        : "09:00",
-      allDay: event?.allDay || false,
-      color: event?.color || "blue",
-    },
-  );
-  const [error, setError] = useState("");
+  const [draft, setDraft] = useState({
+    title: event?.title || "",
+    day: event?.day || (event ? dateKey(date) : day),
+    time: event
+      ? `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+      : "09:00",
+    allDay: event?.allDay || false,
+    color: event?.color || "blue",
+  });
+  const saved = useRef(event),
+    identity = useRef(event?.id || uid()),
+    [error, setError] = useState(""),
+    [deleting, setDeleting] = useState(false);
+  const t = (en: string, es: string) => words(language, en, es);
+  const update = (patch: Partial<typeof draft>) => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    if (!next.title.trim() || !next.day || !next.time) return;
+    const date = new Date(
+      `${next.day}T${next.allDay ? "12:00" : next.time}:00`,
+    );
+    if (!Number.isFinite(date.getTime())) return;
+    const e: CalendarEvent = {
+      id: identity.current,
+      title: next.title.trim(),
+      date: date.getTime() / 1000 - 978307200,
+      day: next.day,
+      allDay: next.allDay,
+      color: next.color,
+      revision: saved.current ? saved.current.revision + 1 : 0,
+    };
+    if (save(e)) {
+      saved.current = e;
+      setError("");
+    } else
+      setError(
+        t(
+          "Could not save. Keep this open and try again.",
+          "No se pudo guardar. Mantén abierto y vuelve a intentarlo.",
+        ),
+      );
+  };
   return (
-    <Sheet
-      title={t(
-        event ? "Edit event" : "New event",
-        event ? "Editar evento" : "Nuevo evento",
-      )}
-      close={close}
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const date = new Date(
-            `${draft.day}T${draft.allDay ? "12:00" : draft.time}:00`,
-          );
-          if (!Number.isFinite(date.getTime()) || dateKey(date) !== draft.day) {
-            setError(t("Check the date", "Revisa la fecha"));
-            return;
-          }
-          if (
-            save({
-              id: event?.id || uid(),
-              title: draft.title.trim(),
-              date: date.getTime() / 1000 - 978307200,
-              day: draft.day,
-              allDay: draft.allDay,
-              color: draft.color,
-              revision: event ? event.revision + 1 : 0,
-            })
-          )
-            clear();
-        }}
+    <>
+      <Sheet
+        title={t("Event", "Evento")}
+        close={close}
+        heading={
+          <input
+            className="inline-title"
+            autoFocus
+            aria-label={t("Event title", "Título del evento")}
+            placeholder={t("What’s the plan?", "¿Qué plan tienes?")}
+            maxLength={240}
+            value={draft.title}
+            onChange={(e) => update({ title: e.target.value })}
+          />
+        }
       >
-        <input
-          autoFocus
-          required
-          maxLength={240}
-          aria-label={t("Event title", "Título del evento")}
-          placeholder={t("What’s the plan?", "¿Qué plan tienes?")}
-          value={draft.title}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-        />
-        <label>
-          {t("Date", "Fecha")}
+        {" "}
+        <div className="event-dates">
           <input
             type="date"
-            required
+            aria-label={t("Date", "Fecha")}
             value={draft.day}
-            onInput={(e) => {
-              const value = e.currentTarget.value;
-              setDraft((d) => ({ ...d, day: value }));
-            }}
+            onInput={(e) => update({ day: e.currentTarget.value })}
           />
-        </label>
-        <div className="event-time-row">
-          <button
-            type="button"
-            className={`choice ${draft.allDay ? "selected" : ""}`}
-            aria-pressed={draft.allDay}
-            onClick={() => setDraft({ ...draft, allDay: !draft.allDay })}
-          >
-            <Check size={17} />
-            {t("All day", "Todo el día")}
-          </button>
           {!draft.allDay && (
             <input
               type="time"
-              required
               aria-label={t("Time", "Hora")}
               value={draft.time}
-              onInput={(e) => {
-                const value = e.currentTarget.value;
-                setDraft((d) => ({ ...d, time: value }));
-              }}
+              onInput={(e) => update({ time: e.currentTarget.value })}
             />
           )}
+          <button
+            className={`property-icon ${draft.allDay ? "active" : ""}`}
+            title={t("All day", "Todo el día")}
+            aria-label={t("All day", "Todo el día")}
+            aria-pressed={draft.allDay}
+            onClick={() => update({ allDay: !draft.allDay })}
+          >
+            <CalendarDays size={21} />
+          </button>
         </div>
-        <div className="swatches" aria-label={t("Color", "Color")}>
+        <div className="swatches">
           {colors.map((color) => (
             <button
-              type="button"
               key={color}
-              aria-label={t("Color", "Color") + ": " + color}
+              aria-label={color}
               aria-pressed={draft.color === color}
               style={{ background: `var(--${color})` }}
-              className={draft.color === color ? "selected" : ""}
-              onClick={() => setDraft({ ...draft, color })}
+              onClick={() => update({ color })}
             >
-              {draft.color === color && <Check size={17} />}
+              {draft.color === color && <Check size={16} />}
             </button>
           ))}
         </div>
-        <small>
-          {t(
-            "Saved in your calendar. No alarm.",
-            "Se guarda en el calendario. Sin alarma.",
-          )}
+        <small className="muted">
+          {t("Calendar only · no alarm", "Solo calendario · sin alarma")}
         </small>
         {error && <p role="alert">{error}</p>}
-        <button className="primary" disabled={!draft.title.trim()}>
-          {t("Save", "Guardar")}
-        </button>
-        {event && (
+        {saved.current && (
           <button
-            type="button"
             className="icon-button danger"
             aria-label={t("Delete event", "Eliminar evento")}
-            onClick={() => {
-              clear();
-              remove(event);
-            }}
+            onClick={() => setDeleting(true)}
           >
             <Trash2 size={20} />
           </button>
         )}
-      </form>
-    </Sheet>
+      </Sheet>
+      {deleting && (
+        <Confirm
+          language={language}
+          title={saved.current?.title || draft.title}
+          cancel={() => setDeleting(false)}
+          confirm={() => {
+            if (saved.current) remove(saved.current);
+            close();
+          }}
+        />
+      )}
+    </>
   );
 }

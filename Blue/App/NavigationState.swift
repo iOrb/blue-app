@@ -14,6 +14,7 @@ enum Route: Hashable {
 @Observable
 final class NavigationState {
     var tab = 0
+    var scope = "all"
     var path: [Route] = []
     var selectedDate = Date()
     var highlightedRecord: UUID?

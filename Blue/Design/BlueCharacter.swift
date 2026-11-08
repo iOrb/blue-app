@@ -89,7 +89,7 @@ struct QuietButton: View {
             Image(systemName: symbol).font(.system(size: 20, weight: .medium))
                 .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }
-        .buttonStyle(.plain).accessibilityLabel(l(key))
+        .buttonStyle(.plain).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()).accessibilityLabel(l(key))
     }
 }
 

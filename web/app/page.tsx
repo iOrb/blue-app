@@ -1,39 +1,30 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
-  ArrowLeft,
-  CalendarDays,
-  LayoutGrid,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-  ChevronRight,
-  Download,
+  Plus,
   FileText,
   List,
+  CalendarDays,
+  Settings2,
+  Trash2,
+  ArrowUp,
   Mic,
   MicOff,
-  Plus,
-  Search,
-  Settings2,
-  SlidersHorizontal,
-  SquarePen,
-  Trash2,
-  Undo2,
-  X,
-  Check,
   LoaderCircle,
+  SlidersHorizontal,
+  Download,
+  ChevronRight,
 } from "lucide-react";
 import {
-  type Language,
   type Library,
+  type Language,
   type Collection,
   type Item,
   type Note,
   type Field,
+  type Value,
   type Query,
+  type CalendarEvent,
   emptyLibrary,
   uid,
   now,
@@ -42,136 +33,132 @@ import {
   boolean,
   favorite,
   favoriteField,
-  value,
-  displayValue,
   queryItems,
   validLibrary,
+  compatibleValue,
   safeLink,
 } from "./blue-model";
-import { BlueMark, Symbol, Indicator } from "./blue-icons";
+import { BlueMark, Symbol } from "./blue-icons";
 import {
-  words,
   Sheet,
-  CollectionEditor,
-  NoteEditor,
-  ItemEditor,
-  IndicatorEditor,
-} from "./blue-editors";
-import { BlueCalendar } from "./blue-calendar";
+  Confirm,
+  EditableText,
+  MarkdownBody,
+  FieldControl,
+  words,
+} from "./blue-ui";
+import { BlueCalendar, EventEditor } from "./blue-calendar";
+import { dateKey } from "./blue-calendar-model";
 import { importLibrary } from "./blue-import";
 import strings from "./native-strings.json";
 const STORE = "blue.web.library.v2";
-const baseQuery = (): Query => ({
-  sortField: "title",
-  ascending: true,
-  filters: [],
-});
-type Route =
-  | { type: "library" | "calendar" }
-  | { type: "collection" | "item" | "note"; id: string };
-type Editing =
-  | { type: "collection"; value?: Collection }
-  | { type: "note"; value?: Note }
-  | { type: "item"; collection: Collection; value?: Item }
-  | { type: "indicator"; collection: Collection };
+type Scope = "all" | "notes" | "collections" | "calendar";
+type Detail = { kind: "note" | "item"; id: string };
 type Result = {
   answer?: { _0: string };
   message?: { _0: string };
   records?: { _0: string[]; edited: boolean };
   notes?: { _0: string[] };
   collection?: { _0: string };
-  collectionView?: { _0: string; _1: Query & { search?: string } };
+  collectionView?: { _0: string; _1: Query };
+  events?: { _0: string[] };
+  selection?: {
+    _0: {
+      records: string[];
+      notes: string[];
+      collections: string[];
+      events: string[];
+      fields: string[];
+      answer: string;
+    };
+  };
+  confirmDeletion?: { _0: { kind: string; id: string } };
   confirmCollectionChange?: {
-    _0: { original: Collection; proposed: Collection; revisions: unknown };
+    _0: { original: Collection; proposed: Collection };
   };
 };
-type Recognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult:
-    | ((event: {
-        results: { isFinal: boolean; 0: { transcript: string } }[];
-      }) => void)
-    | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
 export default function Blue() {
-  const [library, setLibrary] = useState<Library>(emptyLibrary);
-  const current = useRef(library);
-  const [ready, setReady] = useState(false);
-  const [language, setLanguage] = useState<Language>("en");
-  const storageReadable = useRef(true);
-  const [route, setRoute] = useState<Route>({ type: "library" });
-  const [scope, setScope] = useState<"all" | "notes" | "collections">("all");
-  const [starOnly, setStarOnly] = useState(false);
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState<Query>(baseQuery);
-  const [editing, setEditing] = useState<Editing>();
-  const [settings, setSettings] = useState(false);
-  const [filters, setFilters] = useState(false);
-  const [history, setHistory] = useState<Library[]>([]);
-  const [notice, setNotice] = useState("");
-  const [chat, setChat] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Result>();
-  const [resultSnapshot, setResultSnapshot] = useState("");
-  const [chatError, setChatError] = useState("");
-  const [lastPrompt, setLastPrompt] = useState("");
-  const [previous, setPrevious] = useState<string>();
-  const [listening, setListening] = useState(false);
-  const [canListen, setCanListen] = useState(false);
-  const recognition = useRef<Recognition | undefined>(undefined);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const chatBox = useRef<HTMLDivElement>(null);
+  const [library, setLibrary] = useState<Library>(emptyLibrary),
+    current = useRef(library),
+    [ready, setReady] = useState(false),
+    [language, setLanguage] = useState<Language>("en");
+  const [scope, setScope] = useState<Scope>("all"),
+    [collectionID, setCollectionID] = useState<string>(),
+    [detail, setDetail] = useState<Detail>(),
+    session = useRef<{ id: string; revision: number } | undefined>(undefined);
+  const [settings, setSettings] = useState(false),
+    [search, setSearch] = useState(""),
+    [filters, setFilters] = useState(false),
+    [query, setQuery] = useState<Query>({
+      sortField: "title",
+      ascending: true,
+      filters: [],
+    });
+  const [creating, setCreating] = useState(false),
+    [newCollection, setNewCollection] = useState<string>(),
+    [eventEditor, setEventEditor] = useState<{
+      event?: CalendarEvent;
+      day: string;
+    }>(),
+    [selectedDay, setSelectedDay] = useState(() => dateKey(new Date()));
+  const [notice, setNotice] = useState(""),
+    [deletion, setDeletion] = useState<{
+      title: string;
+      perform: () => void;
+    }>();
+  const [chat, setChat] = useState(false),
+    [prompt, setPrompt] = useState(""),
+    [busy, setBusy] = useState(false),
+    [result, setResult] = useState<Result>(),
+    [chatError, setChatError] = useState(""),
+    [resultSnapshot, setResultSnapshot] = useState("");
+  const [listening, setListening] = useState(false),
+    recognition = useRef<any>(null),
+    input = useRef<HTMLTextAreaElement>(null),
+    canRead = useRef(true),
+    conversationTarget = useRef<{
+      record?: string;
+      note?: string;
+      collection?: string;
+      event?: string;
+    }>({});
   const t = (en: string, es: string) => words(language, en, es);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (validLibrary(parsed)) {
-          current.current = parsed;
-          setLibrary(parsed);
-        } else {
-          storageReadable.current = false;
-          setNotice(
-            "The saved library could not be read. Export or restore your backup. / No se pudo leer la biblioteca.",
-          );
-        }
+        if (!validLibrary(parsed)) throw new Error();
+        current.current = parsed;
+        setLibrary(parsed);
       }
-      setPrompt(localStorage.getItem("blue.web.prompt") || "");
       const lang = localStorage.getItem("blue.web.language");
-      if (lang === "es" || lang === "en") setLanguage(lang);
+      if (lang === "en" || lang === "es") setLanguage(lang);
+      setPrompt(localStorage.getItem("blue.web.prompt") || "");
     } catch {
-      storageReadable.current = false;
+      canRead.current = false;
       setNotice(
-        "Browser storage is unavailable. / El almacenamiento de Safari no está disponible.",
+        "No se pudo abrir la biblioteca. / Could not open the saved library.",
       );
     }
     setReady(true);
-    setCanListen(
-      !!(
-        (window as unknown as Record<string, unknown>).SpeechRecognition ||
-        (window as unknown as Record<string, unknown>).webkitSpeechRecognition
-      ),
-    );
     return () => recognition.current?.stop();
   }, []);
   useEffect(() => {
-    if (!ready || !storageReadable.current) return;
+    if (!ready) return;
+    document.documentElement.lang = language;
+    try {
+      localStorage.setItem("blue.web.language", language);
+      localStorage.setItem("blue.web.prompt", prompt);
+    } catch {}
+  }, [language, prompt, ready]);
+  useEffect(() => {
+    if (!ready || !canRead.current) return;
     const abort = new AbortController();
     fetch("/api/library-import", { method: "POST", signal: abort.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("import");
-        return response.json() as Promise<{
-          library: Library;
-          importID: string;
-        }>;
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        return r.json() as Promise<{ library: Library; importID: string }>;
       })
       .then((data) => {
         if (abort.signal.aborted) return;
@@ -181,336 +168,361 @@ export default function Blue() {
           data.importID,
         );
         if (next !== current.current) {
-          // Write the merge and marker atomically before showing it. No undo can reseed deleted data.
           localStorage.setItem(STORE, JSON.stringify(next));
           current.current = next;
           setLibrary(next);
-          setHistory([]);
         }
       })
       .catch(() => {
         if (!abort.signal.aborted)
           setNotice(
             t(
-              "Your lists could not be loaded. Reload to retry.",
-              "No se pudieron cargar tus listas. Recarga para reintentarlo.",
+              "Could not load your lists. Reload to retry.",
+              "No se pudieron cargar tus listas. Recarga para reintentar.",
             ),
           );
       });
     return () => abort.abort();
   }, [ready]);
   useEffect(() => {
-    document.documentElement.lang = language;
-    if (ready)
+    const receive = (e: StorageEvent) => {
+      if (e.key !== STORE || !e.newValue) return;
       try {
-        localStorage.setItem("blue.web.language", language);
-      } catch {
-        /* Library persistence reports storage errors separately. */
-      }
-  }, [language, ready]);
-  useEffect(() => {
-    function outside(e: PointerEvent) {
-      if (chatBox.current && !chatBox.current.contains(e.target as Node)) {
-        setChat(false);
-        input.current?.blur();
-      }
-    }
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, []);
-  useEffect(() => {
-    function receive(e: StorageEvent) {
-      if (e.key === STORE && e.newValue) {
-        try {
-          const next = JSON.parse(e.newValue);
-          if (validLibrary(next)) {
-            current.current = next;
-            setLibrary(next);
-            setNotice(
-              t(
-                "Library updated in another tab.",
-                "Biblioteca actualizada en otra pestaña.",
-              ),
-            );
-          }
-        } catch {
-          /* Ignore invalid external storage. */
+        const next = JSON.parse(e.newValue);
+        if (validLibrary(next)) {
+          current.current = next;
+          setLibrary(next);
         }
-      }
-    }
+      } catch {}
+    };
     window.addEventListener("storage", receive);
     return () => window.removeEventListener("storage", receive);
-  }, [language]);
-  useEffect(() => {
-    if (ready)
-      try {
-        localStorage.setItem("blue.web.prompt", prompt);
-      } catch {}
-  }, [prompt, ready]);
-  const commit = (next: Library, remember = true) => {
+  }, []);
+  const commit = (next: Library) => {
     if (!validLibrary(next)) {
       setNotice(
-        t("That change could not be saved.", "No se pudo guardar ese cambio."),
+        t("Could not save that change.", "No se pudo guardar ese cambio."),
       );
       return false;
     }
-    if (remember) setHistory((h) => [...h.slice(-9), current.current]);
-    current.current = next;
-    setLibrary(next);
     try {
       localStorage.setItem(STORE, JSON.stringify(next));
+      current.current = next;
+      setLibrary(next);
       return true;
     } catch {
       setNotice(
         t(
-          "Storage is full or unavailable. Export a backup before closing this page.",
-          "El almacenamiento está lleno o no está disponible. Exporta una copia antes de cerrar.",
+          "Storage unavailable. Keep this page open and export your library.",
+          "Almacenamiento no disponible. Mantén abierta la página y exporta la biblioteca.",
         ),
       );
       return false;
     }
   };
-  const navigate = (next: Route) => {
-    setRoute(next);
+  const navigate = (next: Scope) => {
+    conversationTarget.current = {};
+    setScope(next);
+    setSettings(false);
+    setCreating(false);
+    setNewCollection(undefined);
+    setEventEditor(undefined);
+    setDeletion(undefined);
+    setCollectionID(undefined);
+    setDetail(undefined);
     setSearch("");
+    setFilters(false);
     setChat(false);
-    setQuery(baseQuery());
-    window.scrollTo({ top: 0, behavior: "instant" });
+    setQuery({ sortField: "title", ascending: true, filters: [] });
   };
-  const collection =
-    route.type === "collection"
-      ? library.collections.find((c) => c.id === route.id)
-      : route.type === "item"
-        ? library.collections.find(
-            (c) =>
-              c.id ===
-              library.records.find((r) => r.id === route.id)?.collectionID,
-          )
+  const openCollection = (id: string) => {
+    conversationTarget.current = {};
+    setCollectionID(id);
+    setScope("collections");
+    setDetail(undefined);
+    setChat(false);
+    setQuery({ sortField: "title", ascending: true, filters: [] });
+    setSearch("");
+  };
+  const openDetail = (kind: "note" | "item", id: string) => {
+    conversationTarget.current = {};
+    const entity =
+      kind === "item"
+        ? current.current.records.find((r) => r.id === id)
+        : current.current.notes.find((n) => n.id === id);
+    if (!entity) return;
+    session.current = { id, revision: entity.revision };
+    setDetail({ kind, id });
+    setChat(false);
+  };
+  const collection = library.collections.find((c) => c.id === collectionID),
+    item =
+      detail?.kind === "item"
+        ? library.records.find((r) => r.id === detail.id)
+        : undefined,
+    note =
+      detail?.kind === "note"
+        ? library.notes.find((n) => n.id === detail.id)
         : undefined;
-  const item =
-    route.type === "item"
-      ? library.records.find((r) => r.id === route.id)
-      : undefined;
-  const note =
-    route.type === "note"
-      ? library.notes.find((n) => n.id === route.id)
-      : undefined;
-  const toggleItem = (r: Item, f: Field) => {
-    const changed =
-      f.id === "__favorite"
-        ? { ...r, favorite: !favorite(r) }
-        : {
-            ...r,
-            values: {
-              ...r.values,
-              [f.id]: { flag: { _0: !r.values[f.id]?.flag?._0 } },
-            },
-          };
+  const changeItem = (r: Item, patch: Partial<Item>) => {
+    const old = current.current.records.find((x) => x.id === r.id);
+    const expected =
+      session.current?.id === r.id ? session.current.revision : r.revision;
+    if (!old || old.revision !== expected) {
+      setNotice(
+        t(
+          "This item changed. Reopen it before editing.",
+          "Este elemento ha cambiado. Ábrelo de nuevo antes de editar.",
+        ),
+      );
+      return;
+    }
+    const next = {
+      ...old,
+      ...patch,
+      revision: old.revision + 1,
+      updatedAt: now(),
+    };
+    if (
+      commit({
+        ...current.current,
+        records: current.current.records.map((x) => (x.id === r.id ? next : x)),
+      }) &&
+      session.current?.id === r.id
+    )
+      session.current.revision = next.revision;
+  };
+  const changeValue = (r: Item, f: Field, v?: Value) => {
+    if (f.id === "__favorite") {
+      changeItem(r, { favorite: !!v?.flag?._0 });
+      return;
+    }
+    const values = {
+      ...(current.current.records.find((x) => x.id === r.id)?.values ||
+        r.values),
+    };
+    if (v) values[f.id] = v;
+    else delete values[f.id];
+    changeItem(r, { values });
+  };
+  const changeNote = (n: Note, patch: Partial<Note>) => {
+    const old = current.current.notes.find((x) => x.id === n.id);
+    const expected =
+      session.current?.id === n.id ? session.current.revision : n.revision;
+    if (!old || old.revision !== expected) {
+      setNotice(
+        t(
+          "This note changed. Reopen it before editing.",
+          "Esta nota ha cambiado. Ábrela de nuevo antes de editar.",
+        ),
+      );
+      return;
+    }
+    const next = {
+      ...old,
+      ...patch,
+      revision: old.revision + 1,
+      updatedAt: now(),
+    };
+    if (
+      commit({
+        ...current.current,
+        notes: current.current.notes.map((x) => (x.id === n.id ? next : x)),
+      }) &&
+      session.current?.id === n.id
+    )
+      session.current.revision = next.revision;
+  };
+  const changeCollection = (c: Collection, patch: Partial<Collection>) =>
     commit({
       ...current.current,
-      records: current.current.records.map((x) =>
-        x.id === r.id
-          ? { ...changed, revision: r.revision + 1, updatedAt: now() }
-          : x,
+      collections: current.current.collections.map((x) =>
+        x.id === c.id ? { ...x, ...patch } : x,
       ),
+    });
+  const fields = (c: Collection) => [
+    favoriteField,
+    ...c.fields.filter((f) => f.kind !== "favorite"),
+  ];
+  const controls = (r: Item, c: Collection, only?: string[], detail = false) =>
+    fields(c)
+      .filter(
+        (f) =>
+          (!only?.length || only.includes(f.id)) &&
+          (detail ||
+            boolean(f) ||
+            f.kind === "status" ||
+            r.values[f.id] !== undefined),
+      )
+      .map((f) => (
+        <FieldControl
+          key={f.id}
+          field={f}
+          stored={
+            f.id === "__favorite"
+              ? { flag: { _0: favorite(r) } }
+              : r.values[f.id]
+          }
+          language={language}
+          save={(v) => changeValue(r, f, v)}
+        />
+      ));
+  const row = (r: Item, c: Collection, only?: string[]) => (
+    <article className="item-row" key={r.id}>
+      <button className="row-title" onClick={() => openDetail("item", r.id)}>
+        {r.title}
+      </button>
+      <div className="row-values">{controls(r, c, only)}</div>
+    </article>
+  );
+  const saveEvent = (e: CalendarEvent) => {
+    const old = current.current.events?.find((x) => x.id === e.id);
+    if ((old && old.revision + 1 !== e.revision) || (!old && e.revision > 0)) {
+      setNotice(
+        t(
+          "This event changed. Reopen it.",
+          "Este evento ha cambiado. Ábrelo de nuevo.",
+        ),
+      );
+      return false;
+    }
+    return commit({
+      ...current.current,
+      events: old
+        ? current.current.events!.map((x) => (x.id === e.id ? e : x))
+        : [...(current.current.events || []), e],
     });
   };
-  const toggleNote = (n: Note) =>
+  const removeEvent = (e: CalendarEvent) => {
+    if (
+      current.current.events?.find((x) => x.id === e.id)?.revision !==
+      e.revision
+    ) {
+      setNotice(
+        t(
+          "This event changed. Reopen it.",
+          "Este evento ha cambiado. Ábrelo de nuevo.",
+        ),
+      );
+      return;
+    }
     commit({
       ...current.current,
-      notes: current.current.notes.map((x) =>
-        x.id === n.id
-          ? {
-              ...n,
-              favorite: !n.favorite,
-              revision: n.revision + 1,
-              updatedAt: now(),
-            }
-          : x,
-      ),
+      events: current.current.events?.filter((x) => x.id !== e.id),
     });
-  const filterFlag = (f: Field) =>
-    setQuery((q) => ({
-      ...q,
-      filters: q.filters.some((x) => x.fieldID === f.id)
-        ? q.filters.filter((x) => x.fieldID !== f.id)
-        : [...q.filters, { fieldID: f.id, flag: true }],
-    }));
+  };
+  const calendar = (
+    <BlueCalendar
+      library={library}
+      language={language}
+      save={saveEvent}
+      remove={removeEvent}
+      openItem={(id) => openDetail("item", id)}
+      onSelectDay={setSelectedDay}
+    />
+  );
+  const requestDelete = (kind: string, id: string, title: string) => {
+    const snapshot = JSON.stringify(current.current);
+    setDeletion({
+      title,
+      perform: () => {
+        if (JSON.stringify(current.current) !== snapshot) {
+          setNotice(
+            t(
+              "Content changed. Please review before deleting.",
+              "El contenido ha cambiado. Revísalo antes de borrar.",
+            ),
+          );
+          setDeletion(undefined);
+          return;
+        }
+        const next = { ...current.current };
+        if (kind === "record")
+          next.records = next.records.filter((r) => r.id !== id);
+        if (kind === "note") next.notes = next.notes.filter((n) => n.id !== id);
+        if (kind === "event")
+          next.events = next.events?.filter((e) => e.id !== id);
+        if (kind === "collection") {
+          next.collections = next.collections.filter((c) => c.id !== id);
+          next.records = next.records.filter((r) => r.collectionID !== id);
+        }
+        if (commit(next)) {
+          setDeletion(undefined);
+          setDetail(undefined);
+          if (kind === "collection") navigate("collections");
+        }
+      },
+    });
+  };
+  const addNote = () => {
+    const n: Note = {
+      id: uid(),
+      title: userText(t("Untitled", "Sin título")),
+      markdown: userText(""),
+      revision: 0,
+      updatedAt: now(),
+    };
+    if (commit({ ...current.current, notes: [...current.current.notes, n] })) {
+      setCreating(false);
+      openDetail("note", n.id);
+    }
+  };
+  const addItem = () => {
+    if (!collection) return;
+    const r: Item = {
+      id: uid(),
+      collectionID: collection.id,
+      title: t("Untitled", "Sin título"),
+      markdown: userText(""),
+      values: {},
+      revision: 0,
+      updatedAt: now(),
+    };
+    if (
+      commit({ ...current.current, records: [...current.current.records, r] })
+    )
+      openDetail("item", r.id);
+  };
+  const addCollection = () => {
+    const c: Collection = {
+      id: uid(),
+      title: userText(t("New collection", "Nueva colección")),
+      symbol: "list.bullet",
+      fields: [],
+      createdAt: now(),
+    };
+    if (
+      commit({
+        ...current.current,
+        collections: [...current.current.collections, c],
+      })
+    ) {
+      setCreating(false);
+      openCollection(c.id);
+      setNewCollection(c.id);
+    }
+  };
   const exportData = () => {
-    const blob = new Blob([JSON.stringify(current.current, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(current.current, null, 2)], {
+        type: "application/json",
+      }),
+    );
     const a = document.createElement("a");
     a.href = url;
-    a.download = `blue-web-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = "blue-library.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const showEditor = (edit: Editing) => {
-    setEditing(edit);
-    setChat(false);
-  };
-  const saveNote = (n: Note) => {
-    if (
-      editing?.type === "note" &&
-      editing.value &&
-      current.current.notes.find((x) => x.id === n.id)?.revision !==
-        editing.value.revision
-    ) {
-      setNotice(
-        t(
-          "This note changed. Copy your draft before reopening it.",
-          "Esta nota ha cambiado. Copia tu borrador antes de abrirla de nuevo.",
-        ),
-      );
-      return;
-    }
-    if (
-      commit({
-        ...current.current,
-        notes: current.current.notes.some((x) => x.id === n.id)
-          ? current.current.notes.map((x) => (x.id === n.id ? n : x))
-          : [n, ...current.current.notes],
-      })
-    ) {
-      setEditing(undefined);
-      navigate({ type: "note", id: n.id });
-    }
-  };
-  const saveItem = (r: Item) => {
-    if (
-      editing?.type === "item" &&
-      editing.value &&
-      current.current.records.find((x) => x.id === r.id)?.revision !==
-        editing.value.revision
-    ) {
-      setNotice(
-        t(
-          "This item changed. Copy your draft before reopening it.",
-          "Este elemento ha cambiado. Copia tu borrador antes de volver a abrirlo.",
-        ),
-      );
-      return;
-    }
-    if (
-      commit({
-        ...current.current,
-        records: current.current.records.some((x) => x.id === r.id)
-          ? current.current.records.map((x) => (x.id === r.id ? r : x))
-          : [...current.current.records, r],
-      })
-    ) {
-      setEditing(undefined);
-      navigate({ type: "item", id: r.id });
-    }
-  };
-  const flags = (c: Collection) => [
-    favoriteField,
-    ...c.fields.filter((f) => boolean(f) && f.kind !== "favorite"),
-  ];
-  const properties = (r: Item, c: Collection) => (
-    <dl className="properties">
-      {c.fields
-        .filter((f) => !boolean(f) && value(r.values[f.id]) !== "")
-        .map((f) => (
-          <div key={f.id}>
-            <dt>{text(f.label, language)}</dt>
-            <dd>{displayValue(r.values[f.id], f, language)}</dd>
-          </div>
-        ))}
-    </dl>
-  );
-  const indicators = (r: Item, c: Collection) => (
-    <div className="indicators">
-      {flags(c).map((f) => (
-        <Indicator
-          key={f.id}
-          field={f}
-          active={
-            f.id === "__favorite"
-              ? favorite(r)
-              : r.values[f.id]?.flag?._0 || false
-          }
-          language={language}
-          onClick={() => toggleItem(r, f)}
-        />
-      ))}
-    </div>
-  );
-  const renderItem = (r: Item, c: Collection) => (
-    <article className="item-row" key={r.id}>
-      <button
-        className="row-content"
-        onClick={() => navigate({ type: "item", id: r.id })}
-      >
-        <span className="row-title">{r.title}</span>
-        {properties(r, c)}
-        {text(r.markdown, language) && (
-          <span className="row-excerpt">
-            {text(r.markdown, language)
-              .replace(/[#*`>]/g, "")
-              .slice(0, 150)}
-          </span>
-        )}
-      </button>
-      {indicators(r, c)}
-    </article>
-  );
-  const renderNote = (n: Note) => (
-    <article className="note-card" key={n.id}>
-      <button
-        className="note-content"
-        onClick={() => navigate({ type: "note", id: n.id })}
-      >
-        <FileText size={20} />
-        <h3>{text(n.title, language)}</h3>
-        <p>
-          {text(n.markdown, language)
-            .replace(/[#*`>]/g, "")
-            .slice(0, 80)}
-        </p>
-      </button>
-      <Indicator
-        field={favoriteField}
-        active={!!n.favorite}
-        language={language}
-        onClick={() => toggleNote(n)}
-      />
-    </article>
-  );
-  const markdown = (body: string) => (
-    <div className="markdown">
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children }) => (
-            <a
-              href={safeLink(href || "")}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {body}
-      </Markdown>
-    </div>
-  );
   async function send(e?: FormEvent) {
     e?.preventDefault();
     if (busy || !prompt.trim()) return;
     recognition.current?.stop();
-    input.current?.blur();
     setBusy(true);
-    setChat(true);
-    setChatError("");
     setResult(undefined);
-    const sent = prompt.trim();
-    setLastPrompt(sent);
-    const snapshot = JSON.stringify(current.current);
+    setChatError("");
+    const snapshot = JSON.stringify(current.current),
+      sent = prompt.trim();
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
@@ -519,55 +531,58 @@ export default function Blue() {
           prompt: sent,
           language,
           library: current.current,
-          previousRecord: note ? undefined : item?.id || previous,
-          collectionID: collection?.id,
-          noteID: note?.id,
+          collectionID: collection?.id ?? conversationTarget.current.collection,
+          previousRecord: note
+            ? undefined
+            : (item?.id ?? conversationTarget.current.record),
+          noteID: item
+            ? undefined
+            : (note?.id ?? conversationTarget.current.note),
+          surface: detail?.kind || (collection ? "collection" : scope),
+          selectedDay,
+          eventID: conversationTarget.current.event,
         }),
         signal: AbortSignal.timeout(105000),
       });
       const data = (await response.json()) as {
-        error?: string;
-        library: unknown;
+        library: Library;
         result: Result;
+        error?: string;
       };
-      if (!response.ok) throw new Error(data.error || "model_unavailable");
+      if (!response.ok) throw new Error(data.error);
       if (JSON.stringify(current.current) !== snapshot)
         throw new Error("stale");
       if (!validLibrary(data.library)) throw new Error("invalid");
       if (JSON.stringify(data.library) !== snapshot && !commit(data.library))
         throw new Error("storage");
-      const answer = data.result as Result;
-      setResult(answer);
-      setResultSnapshot(JSON.stringify(data.library));
-      if (answer.records?._0.length === 1) setPrevious(answer.records._0[0]);
+      const selection = data.result.selection?._0;
+      const recordIDs = data.result.records?._0 ?? selection?.records ?? [];
+      const noteIDs = data.result.notes?._0 ?? selection?.notes ?? [];
+      const eventIDs = data.result.events?._0 ?? selection?.events ?? [];
+      const resultCollection =
+        data.result.collection?._0 ?? data.result.collectionView?._0;
+      if (recordIDs.length === 1)
+        conversationTarget.current = { record: recordIDs[0] };
+      else if (noteIDs.length === 1)
+        conversationTarget.current = { note: noteIDs[0] };
+      else if (eventIDs.length === 1)
+        conversationTarget.current = { event: eventIDs[0] };
+      else if (resultCollection)
+        conversationTarget.current = { collection: resultCollection };
+      setResult(data.result);
+      setResultSnapshot(JSON.stringify(current.current));
       setPrompt("");
     } catch (error) {
-      const key = error instanceof Error ? error.message : "";
       setChatError(
-        key === "stale"
+        error instanceof Error && error.message === "stale"
           ? t(
-              "Your library changed during this request. Send it again.",
-              "La biblioteca cambió durante la petición. Vuelve a enviarla.",
+              "Content changed. Send your request again.",
+              "El contenido ha cambiado. Envía de nuevo la petición.",
             )
-          : key === "busy"
-            ? t(
-                "The Mac is handling another request. Try again shortly.",
-                "El Mac está atendiendo otra petición. Prueba en unos segundos.",
-              )
-            : key === "sign_in"
-              ? t(
-                  "Sign in with your ChatGPT account to use Blue.",
-                  "Inicia sesión con tu cuenta de ChatGPT para usar Blue.",
-                )
-              : key === "storage"
-                ? t(
-                    "Export your library before continuing: browser storage is unavailable.",
-                    "Exporta la biblioteca antes de continuar: no hay almacenamiento disponible.",
-                  )
-                : t(
-                    "Blue could not connect to the Mac model. Keep the Mac awake and try again. Your draft is still here.",
-                    "Blue no pudo conectar con el modelo del Mac. Mantén el Mac despierto y vuelve a probar. Tu borrador sigue aquí.",
-                  ),
+          : t(
+              "Blue could not finish. Your message is still here.",
+              "Blue no pudo terminar. Tu mensaje sigue aquí.",
+            ),
       );
     } finally {
       setBusy(false);
@@ -578,61 +593,94 @@ export default function Blue() {
       recognition.current?.stop();
       return;
     }
-    const speechWindow = window as unknown as {
-      SpeechRecognition?: new () => Recognition;
-      webkitSpeechRecognition?: new () => Recognition;
-    };
-    const Constructor =
-      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!Constructor) {
+    const Speech =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!Speech) {
+      input.current?.focus();
       setChatError(
         t(
-          "Use the microphone on your iPhone keyboard to dictate.",
-          "Usa el micrófono del teclado del iPhone para dictar.",
+          "Use the microphone on your keyboard.",
+          "Usa el micrófono de tu teclado.",
         ),
       );
-      setChat(true);
-      input.current?.focus();
       return;
     }
-    const r = new Constructor();
-    recognition.current = r;
+    const r = new Speech();
     r.lang = language === "es" ? "es-ES" : "en-US";
-    r.continuous = false;
     r.interimResults = false;
-    r.onresult = (e) => {
-      const spoken = Array.from(e.results)
-        .filter((x) => x.isFinal)
-        .map((x) => x[0].transcript)
-        .join(" ");
-      setPrompt((p) => `${p}${p ? " " : ""}${spoken}`.slice(0, 2000));
-    };
+    r.onresult = (e: any) =>
+      setPrompt(
+        (p) =>
+          p + (p ? " " : "") + e.results[e.results.length - 1][0].transcript,
+      );
     r.onend = () => setListening(false);
     r.onerror = () => {
       setListening(false);
-      setChatError(
-        t(
-          "Microphone unavailable. You can dictate with the keyboard microphone.",
-          "El micrófono no está disponible. Puedes dictar desde el teclado.",
-        ),
-      );
+      setChatError(t("Microphone unavailable.", "Micrófono no disponible."));
     };
-    try {
-      r.start();
-      setListening(true);
-      setChat(true);
-    } catch {
-      r.onerror?.();
-    }
+    recognition.current = r;
+    r.start();
+    setListening(true);
   }
-  function approveChange() {
+  const composer = (
+    <form className="composer" onSubmit={send}>
+      <textarea
+        autoFocus
+        ref={input}
+        aria-label={t("Message Blue", "Mensaje para Blue")}
+        placeholder={t("Ask Blue…", "Pídeselo a Blue…")}
+        value={prompt}
+        maxLength={2000}
+        rows={1}
+        onChange={(e) => setPrompt(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className={`icon-button ${listening ? "active" : ""}`}
+        aria-label={t("Dictate", "Dictar")}
+        onClick={dictate}
+      >
+        {listening ? <MicOff size={20} /> : <Mic size={20} />}
+      </button>
+      <button
+        className="round-dark"
+        aria-label={t("Send", "Enviar")}
+        disabled={busy || !prompt.trim()}
+      >
+        {busy ? (
+          <LoaderCircle className="spin" size={20} />
+        ) : (
+          <ArrowUp size={20} />
+        )}
+      </button>
+    </form>
+  );
+  const selection = result?.selection?._0;
+  const resultRecords = selection?.records || result?.records?._0 || [];
+  const resultNotes = selection?.notes || result?.notes?._0 || [];
+  const resultCollections =
+    selection?.collections ||
+    (result?.collection
+      ? [result.collection._0]
+      : result?.collectionView
+        ? [result.collectionView._0]
+        : []);
+  const resultEvents = selection?.events || result?.events?._0 || [];
+  const confirmSchema = () => {
     const pending = result?.confirmCollectionChange?._0;
     if (!pending) return;
     if (JSON.stringify(current.current) !== resultSnapshot) {
       setChatError(
         t(
-          "The library changed. Ask Blue again.",
-          "La biblioteca ha cambiado. Pídeselo de nuevo a Blue.",
+          "Content changed. Ask again.",
+          "El contenido ha cambiado. Pídeselo de nuevo.",
         ),
       );
       return;
@@ -647,9 +695,10 @@ export default function Blue() {
           ? {
               ...r,
               values: Object.fromEntries(
-                Object.entries(r.values).filter(([id]) =>
-                  pending.proposed.fields.some((f) => f.id === id),
-                ),
+                Object.entries(r.values).filter(([id, v]) => {
+                  const f = pending.proposed.fields.find((f) => f.id === id);
+                  return f && compatibleValue(f, v);
+                }),
               ),
               revision: r.revision + 1,
               updatedAt: now(),
@@ -658,52 +707,20 @@ export default function Blue() {
       ),
     };
     if (commit(next)) setResult({ collection: { _0: pending.proposed.id } });
-  }
-  const resultRecords =
-    result?.records?._0
-      .map((id) => library.records.find((r) => r.id === id))
-      .filter((r): r is Item => !!r) || [];
-  const resultNotes =
-    result?.notes?._0
-      .map((id) => library.notes.find((n) => n.id === id))
-      .filter((n): n is Note => !!n) || [];
-  const resultCollection = library.collections.find(
-    (c) => c.id === (result?.collection?._0 || result?.collectionView?._0),
-  );
-  const resultKey = result?.message?._0;
-  const message = resultKey
-    ? (strings as Record<string, { en: string; es: string }>)[resultKey]?.[
-        language
-      ] ||
-      t(
-        "Blue could not complete that request. Try being more specific.",
-        "Blue no pudo completar la petición. Prueba a concretarla un poco más.",
-      )
-    : "";
-  const collectionItems = collection
-    ? queryItems(
-        library.records.filter((r) => r.collectionID === collection.id),
-        query,
-        search,
-        language,
-      )
-    : [];
-  const filteredNotes = library.notes.filter(
-    (n) =>
-      (!starOnly || n.favorite) &&
-      text(n.title, language)
+  };
+  const collections = library.collections.filter(
+    (c) =>
+      !search ||
+      text(c.title, language)
         .toLocaleLowerCase()
         .includes(search.toLocaleLowerCase()),
   );
-  const filteredCollections = library.collections.filter((c) =>
-    text(c.title, language)
-      .toLocaleLowerCase()
-      .includes(search.toLocaleLowerCase()),
-  );
-  const rootItems = library.records.filter(
-    (r) =>
-      (!starOnly || favorite(r)) &&
-      r.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  const notes = library.notes.filter(
+    (n) =>
+      !search ||
+      text(n.title, language)
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
   );
   return (
     <>
@@ -711,1069 +728,727 @@ export default function Blue() {
         <header className="app-header">
           <button
             className="brand"
-            onClick={() => navigate({ type: "library" })}
-            aria-label={t("Blue home", "Inicio de Blue")}
+            aria-label={t("All of Blue", "Todo Blue")}
+            onClick={() => navigate("all")}
           >
-            <BlueMark small />
-            <span>
-              blue<span className="brand-dot">.</span>
-            </span>
+            <span className="brand-spark">✳</span> Blue
           </button>
           <div className="header-actions">
-            {history.length > 0 && (
-              <button
-                className="icon-button"
-                title={t("Undo last change", "Deshacer último cambio")}
-                aria-label={t("Undo last change", "Deshacer último cambio")}
-                onClick={() => {
-                  const old = history.at(-1)!;
-                  if (commit(old, false)) setHistory((h) => h.slice(0, -1));
-                }}
-              >
-                <Undo2 size={20} />
-              </button>
-            )}
             <button
               className="icon-button"
               aria-label={t("Settings", "Ajustes")}
               onClick={() => setSettings(true)}
             >
-              <Settings2 size={21} />
+              <Settings2 size={19} />
             </button>
           </div>
         </header>
         {notice && (
-          <div className="notice" role="alert">
-            <span>{notice}</span>
-            <button
-              className="icon-button"
-              aria-label={t("Dismiss", "Cerrar")}
-              onClick={() => setNotice("")}
-            >
-              <X size={18} />
-            </button>
+          <div className="notice" role="alert" onClick={() => setNotice("")}>
+            {notice}
           </div>
-        )}
-        {ready && (
-          <nav className="app-navigation" aria-label={t("Views", "Vistas")}>
-            {(["all", "collections", "notes", "calendar"] as const).map(
-              (view) => {
-                const label =
-                  view === "all"
-                    ? t("Library", "Biblioteca")
-                    : view === "collections"
-                      ? t("Collections", "Colecciones")
-                      : view === "notes"
-                        ? t("Notes", "Notas")
-                        : t("Calendar", "Calendario");
-                const selected =
-                  view === "calendar"
-                    ? route.type === "calendar"
-                    : route.type === "library" && scope === view;
-                const Icon =
-                  view === "calendar"
-                    ? CalendarDays
-                    : view === "notes"
-                      ? FileText
-                      : view === "collections"
-                        ? List
-                        : LayoutGrid;
-                return (
-                  <button
-                    key={view}
-                    className={`nav-icon ${selected ? "selected" : ""}`}
-                    aria-label={label}
-                    title={label}
-                    aria-current={selected ? "page" : undefined}
-                    onClick={() => {
-                      navigate({
-                        type: view === "calendar" ? "calendar" : "library",
-                      });
-                      if (view !== "calendar") setScope(view);
-                    }}
-                  >
-                    <Icon size={22} />
-                  </button>
-                );
-              },
-            )}
-            <span className="nav-spacer" />
-            {route.type === "library" && (
-              <Indicator
-                field={favoriteField}
-                active={starOnly}
-                language={language}
-                label={t("Filter favorites", "Filtrar favoritos")}
-                onClick={() => {
-                  setStarOnly(!starOnly);
-                  if (route.type !== "library") {
-                    navigate({ type: "library" });
-                    setScope("all");
-                  }
-                }}
-              />
-            )}
-          </nav>
         )}
         <main>
           {!ready ? (
-            <div className="empty">
-              <LoaderCircle className="spin" />
-              <p>{t("Opening your library…", "Abriendo tu biblioteca…")}</p>
-            </div>
-          ) : route.type === "calendar" ? (
-            <BlueCalendar
-              library={library}
-              language={language}
-              openItem={(id) => navigate({ type: "item", id })}
-              save={(event) => {
-                const old = current.current.events?.find(
-                  (e) => e.id === event.id,
-                );
-                if ((!old && event.revision > 0) || (old && old.revision + 1 !== event.revision)) {
-                  setNotice(
-                    t(
-                      "This event changed. Reopen it.",
-                      "Este evento ha cambiado. Ábrelo de nuevo.",
-                    ),
-                  );
-                  return false;
-                }
-                return commit({
-                  ...current.current,
-                  events: old
-                    ? current.current.events!.map((e) =>
-                        e.id === event.id ? event : e,
-                      )
-                    : [...(current.current.events || []), event],
-                });
-              }}
-              remove={(event) =>
-                commit({
-                  ...current.current,
-                  events: current.current.events?.filter(
-                    (e) => e.id !== event.id,
-                  ),
-                })
-              }
-            />
-          ) : route.type === "library" ? (
+            <LoaderCircle className="spin" />
+          ) : (
             <>
-              <div className="search-row">
-                <label className="search">
-                  <Search size={18} />
-                  <input
-                    aria-label={t("Search library", "Buscar en biblioteca")}
-                    placeholder={t("Search", "Buscar")}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+              <div className="view-heading">
+                {collection ? (
+                  <EditableText
+                    key={collection.id}
+                    value={text(collection.title, language)}
+                    label={t("Collection title", "Título de colección")}
+                    large
+                    save={(s) =>
+                      changeCollection(collection, { title: userText(s) })
+                    }
                   />
-                  {search && (
-                    <button
-                      className="icon-button"
-                      aria-label={t("Clear search", "Borrar búsqueda")}
-                      onClick={() => setSearch("")}
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </label>
-              </div>
-              {scope !== "notes" &&
-                !starOnly &&
-                (!search || filteredCollections.length > 0) && (
-                  <section>
-                    <div className="section-label">
-                      <h2>{t("Collections", "Colecciones")}</h2>
+                ) : (
+                  <h1>
+                    {scope === "all"
+                      ? t("Your space", "Tu espacio")
+                      : scope === "notes"
+                        ? t("Notes", "Notas")
+                        : scope === "collections"
+                          ? t("Collections", "Colecciones")
+                          : t("Calendar", "Calendario")}
+                  </h1>
+                )}
+                <div className="header-actions">
+                  {collection && (
+                    <>
                       <button
                         className="icon-button"
-                        aria-label={t("New collection", "Nueva colección")}
-                        onClick={() => showEditor({ type: "collection" })}
+                        aria-label={t("Filters", "Filtros")}
+                        onClick={() => setFilters(true)}
                       >
-                        <Plus size={20} />
+                        <SlidersHorizontal size={21} />
                       </button>
-                    </div>
-                    <div className="collection-grid">
-                      {filteredCollections.map((c) => (
+                      <button
+                        className="icon-button danger"
+                        aria-label={t(
+                          "Delete collection",
+                          "Eliminar colección",
+                        )}
+                        onClick={() =>
+                          requestDelete(
+                            "collection",
+                            collection.id,
+                            text(collection.title, language),
+                          )
+                        }
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className="round-dark"
+                    aria-label={
+                      scope === "calendar"
+                        ? t("New event", "Nuevo evento")
+                        : t("Add", "Añadir")
+                    }
+                    onClick={() =>
+                      collection
+                        ? addItem()
+                        : scope === "calendar"
+                          ? setEventEditor({ day: selectedDay })
+                          : scope === "notes"
+                            ? addNote()
+                            : scope === "collections"
+                              ? addCollection()
+                              : setCreating(true)
+                    }
+                  >
+                    <Plus size={23} />
+                  </button>
+                </div>
+              </div>
+
+              {collection ? (
+                <>
+                  <div className="collection-filters">
+                    {fields(collection)
+                      .filter((f) => boolean(f) || f.kind === "status")
+                      .map((f) => (
+                        <FieldControl
+                          key={f.id}
+                          field={f}
+                          language={language}
+                          filter
+                          stored={
+                            query.filters.find((x) => x.fieldID === f.id)?.flag
+                              ? { flag: { _0: true } }
+                              : query.filters.find((x) => x.fieldID === f.id)
+                                    ?.text
+                                ? {
+                                    option: {
+                                      _0: query.filters.find(
+                                        (x) => x.fieldID === f.id,
+                                      )!.text!,
+                                    },
+                                  }
+                                : undefined
+                          }
+                          save={(v) =>
+                            setQuery((q) => ({
+                              ...q,
+                              filters: [
+                                ...q.filters.filter((x) => x.fieldID !== f.id),
+                                ...(v?.flag?._0
+                                  ? [{ fieldID: f.id, flag: true }]
+                                  : v?.option
+                                    ? [{ fieldID: f.id, text: v.option._0 }]
+                                    : []),
+                              ],
+                            }))
+                          }
+                        />
+                      ))}
+                    {query.filters
+                      .filter(
+                        (f) =>
+                          f.flag === undefined &&
+                          !collection.fields.find(
+                            (x) => x.id === f.fieldID && x.kind === "status",
+                          ),
+                      )
+                      .map((f) => (
                         <button
-                          className="collection-card"
-                          key={c.id}
+                          className="active-filter"
+                          key={f.fieldID}
+                          aria-label={t("Remove filter", "Quitar filtro")}
                           onClick={() =>
-                            navigate({ type: "collection", id: c.id })
+                            setQuery((q) => ({
+                              ...q,
+                              filters: q.filters.filter(
+                                (x) => x.fieldID !== f.fieldID,
+                              ),
+                            }))
                           }
                         >
-                          <span className="collection-symbol">
-                            <Symbol name={c.symbol} size={24} />
-                          </span>
-                          <span>
+                          <Symbol
+                            name={
+                              collection.fields.find((x) => x.id === f.fieldID)
+                                ?.icon || "line.3.horizontal.decrease"
+                            }
+                          />
+                          {f.minimum !== undefined ? "≥ " + f.minimum : f.text}
+                        </button>
+                      ))}
+                  </div>
+                  <div className="item-list">
+                    {queryItems(
+                      library.records.filter(
+                        (r) => r.collectionID === collection.id,
+                      ),
+                      query,
+                      search,
+                      language,
+                    ).map((r) => row(r, collection))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {(scope === "all" || scope === "collections") && (
+                    <section className="library-section">
+                      {scope === "all" && (
+                        <div className="section-label">
+                          <h2>{t("Collections", "Colecciones")}</h2>
+                        </div>
+                      )}
+                      <div className="collection-list">
+                        {collections.map((c) => (
+                          <button
+                            className="collection-line"
+                            key={c.id}
+                            onClick={() => openCollection(c.id)}
+                          >
+                            <Symbol name={c.symbol} size={23} />
                             <strong>{text(c.title, language)}</strong>
-                            <small>
+                            <span className="count">
                               {
                                 library.records.filter(
                                   (r) => r.collectionID === c.id,
                                 ).length
                               }
-                            </small>
-                          </span>
-                          <ChevronRight size={18} />
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                )}
-              {scope !== "collections" &&
-                (!search || filteredNotes.length > 0) && (
-                  <section>
-                    <div className="section-label">
-                      <h2>{t("Notes", "Notas")}</h2>
-                      <button
-                        className="icon-button"
-                        aria-label={t("New note", "Nueva nota")}
-                        onClick={() => showEditor({ type: "note" })}
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                    <div className="note-grid">
-                      {filteredNotes.map(renderNote)}
-                    </div>
-                  </section>
-                )}
-              {scope !== "notes" &&
-                (starOnly || search) &&
-                rootItems.length > 0 && (
-                  <section>
-                    <div className="section-label">
-                      <h2>{t("Items", "Elementos")}</h2>
-                      <span>{rootItems.length}</span>
-                    </div>
-                    <div className="item-list">
-                      {rootItems.map((r) =>
-                        renderItem(
-                          r,
-                          library.collections.find(
-                            (c) => c.id === r.collectionID,
-                          )!,
-                        ),
+                            </span>
+                            <ChevronRight size={16} />
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {(scope === "all" || scope === "notes") && (
+                    <section className="library-section">
+                      {scope === "all" && (
+                        <div className="section-label">
+                          <h2>{t("Notes", "Notas")}</h2>
+                        </div>
                       )}
-                    </div>
-                  </section>
-                )}
-              {(starOnly || search) &&
-                !filteredNotes.length &&
-                !rootItems.length &&
-                !(!starOnly && filteredCollections.length) && (
-                  <div className="empty">
-                    <Search />
-                    <p>
-                      {t(
-                        "Nothing here yet. Try another filter.",
-                        "Aún no hay nada aquí. Prueba otro filtro.",
+                      <div className="note-list">
+                        {notes.map((n) => (
+                          <button
+                            className="note-line"
+                            key={n.id}
+                            onClick={() => openDetail("note", n.id)}
+                          >
+                            <span>{text(n.title, language)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {(scope === "all" || scope === "calendar") && (
+                    <section className="library-section calendar-section">
+                      {scope === "all" && (
+                        <div className="section-label">
+                          <h2>{t("Calendar", "Calendario")}</h2>
+                          <button
+                            className="icon-button"
+                            aria-label={t("New event", "Nuevo evento")}
+                            onClick={() => setEventEditor({ day: selectedDay })}
+                          >
+                            <Plus size={20} />
+                          </button>
+                        </div>
                       )}
-                    </p>
-                  </div>
-                )}
-            </>
-          ) : route.type === "collection" && collection ? (
-            <>
-              <button
-                className="back"
-                onClick={() => navigate({ type: "library" })}
-              >
-                <ArrowLeft size={18} />
-                {t("Your library", "Tu biblioteca")}
-              </button>
-              <div className="detail-heading">
-                <div className="title-with-symbol">
-                  <span className="collection-symbol large">
-                    <Symbol name={collection.symbol} size={30} />
-                  </span>
-                  <div>
-                    <h1>{text(collection.title, language)}</h1>
-                  </div>
-                </div>
-                <button
-                  className="icon-button"
-                  aria-label={t("Edit collection", "Editar colección")}
-                  onClick={() =>
-                    showEditor({ type: "collection", value: collection })
-                  }
-                >
-                  <SquarePen size={20} />
-                </button>
-              </div>
-              <div className="collection-tools">
-                <div className="filter-indicators">
-                  {flags(collection).map((f) => (
-                    <Indicator
-                      key={f.id}
-                      field={f}
-                      active={query.filters.some((x) => x.fieldID === f.id)}
-                      language={language}
-                      label={`${t("Filter", "Filtrar")}: ${text(f.label, language)}`}
-                      onClick={() => filterFlag(f)}
-                    />
-                  ))}
-                </div>
-                <div className="header-actions">
-                  <button
-                    className={`icon-button ${filters ? "selected" : ""}`}
-                    aria-label={t("Filter and sort", "Filtrar y ordenar")}
-                    onClick={() => setFilters(true)}
-                  >
-                    <SlidersHorizontal size={20} />
-                  </button>
-                  <button
-                    className="primary compact"
-                    onClick={() => showEditor({ type: "item", collection })}
-                  >
-                    <Plus size={19} />
-                    <span>{t("Add", "Añadir")}</span>
-                  </button>
-                </div>
-              </div>
-              {query.filters.some((f) => f.flag === undefined) && (
-                <div className="active-filters">
-                  {query.filters
-                    .filter((f) => f.flag === undefined)
-                    .map((f) => (
-                      <button
-                        className="choice selected"
-                        key={f.fieldID}
-                        onClick={() =>
-                          setQuery((q) => ({
-                            ...q,
-                            filters: q.filters.filter(
-                              (x) => x.fieldID !== f.fieldID,
-                            ),
-                          }))
-                        }
-                      >
-                        {text(
-                          collection.fields.find((x) => x.id === f.fieldID)
-                            ?.label || userText(f.fieldID),
-                          language,
-                        )}
-                        :{" "}
-                        {f.text || `${f.minimum ?? "−∞"} – ${f.maximum ?? "∞"}`}
-                        <X size={14} />
-                      </button>
-                    ))}
-                </div>
-              )}
-              <label className="search">
-                <Search size={18} />
-                <input
-                  placeholder={t("Find an item…", "Busca un elemento…")}
-                  aria-label={t("Search items", "Buscar elementos")}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </label>
-              <div className="section-label">
-                <span>
-                  {collectionItems.length} {t("items", "elementos")}
-                </span>
-                <button
-                  className="text-button"
-                  onClick={() => showEditor({ type: "indicator", collection })}
-                >
-                  <Plus size={15} />
-                  {t("Indicator", "Indicador")}
-                </button>
-              </div>
-              <div className="item-list">
-                {collectionItems.map((r) => renderItem(r, collection))}
-              </div>
-              {!collectionItems.length && (
-                <div className="empty">
-                  <Symbol name={collection.symbol} size={34} />
-                  <h2>
-                    {t("Room for something good.", "Aquí cabe algo bueno.")}
-                  </h2>
-                  <p>
-                    {t(
-                      "Add an item or tell Blue what belongs here.",
-                      "Añade un elemento o cuéntale a Blue qué quieres guardar.",
-                    )}
-                  </p>
-                </div>
+                      {calendar}
+                    </section>
+                  )}
+                </>
               )}
             </>
-          ) : route.type === "note" && note ? (
-            <>
-              <button
-                className="back"
-                onClick={() => navigate({ type: "library" })}
-              >
-                <ArrowLeft size={18} />
-                {t("Your library", "Tu biblioteca")}
-              </button>
-              <div className="detail-heading">
-                <div>
-                  <h1>{text(note.title, language)}</h1>
-                </div>
-                <div className="header-actions">
-                  <Indicator
-                    field={favoriteField}
-                    active={!!note.favorite}
-                    language={language}
-                    onClick={() => toggleNote(note)}
-                  />
-                  <button
-                    className="icon-button"
-                    aria-label={t("Edit note", "Editar nota")}
-                    onClick={() => showEditor({ type: "note", value: note })}
-                  >
-                    <SquarePen size={20} />
-                  </button>
-                </div>
-              </div>
-              {markdown(
-                text(note.markdown, language) ||
-                  t(
-                    "*Your note is ready for a thought.*",
-                    "*Tu nota está lista para una idea.*",
-                  ),
-              )}
-              <button
-                className="danger text-button"
-                onClick={() => {
-                  commit({
-                    ...current.current,
-                    notes: current.current.notes.filter(
-                      (n) => n.id !== note.id,
-                    ),
-                  });
-                  navigate({ type: "library" });
-                  setNotice(
-                    t(
-                      "Note deleted. Use Undo to restore it.",
-                      "Nota eliminada. Pulsa Deshacer para recuperarla.",
-                    ),
-                  );
-                }}
-              >
-                <Trash2 size={16} />
-                {t("Delete note", "Eliminar nota")}
-              </button>
-            </>
-          ) : route.type === "item" && item && collection ? (
-            <>
-              <button
-                className="back"
-                onClick={() =>
-                  navigate({ type: "collection", id: collection.id })
-                }
-              >
-                <ArrowLeft size={18} />
-                <Symbol name={collection.symbol} size={16} />
-                {text(collection.title, language)}
-              </button>
-              <div className="detail-heading">
-                <h1>{item.title}</h1>
-                <button
-                  className="icon-button"
-                  aria-label={t("Edit item", "Editar elemento")}
-                  onClick={() =>
-                    showEditor({ type: "item", value: item, collection })
-                  }
-                >
-                  <SquarePen size={20} />
-                </button>
-              </div>
-              <div className="indicator-meanings">
-                {flags(collection).map((f) => (
-                  <div key={f.id}>
-                    <Indicator
-                      field={f}
-                      active={
-                        f.id === "__favorite"
-                          ? favorite(item)
-                          : item.values[f.id]?.flag?._0 || false
-                      }
-                      language={language}
-                      onClick={() => toggleItem(item, f)}
-                    />
-                    <span>{text(f.label, language)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="detail-properties">
-                {properties(item, collection)}
-              </div>
-              {markdown(text(item.markdown, language))}
-              {item.sources?.length ? (
-                <section className="sources">
-                  <h2>{t("Sources", "Fuentes")}</h2>
-                  {item.sources.map((source, i) => (
-                    <a
-                      key={i}
-                      href={safeLink(source.url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {source.title}
-                      <ChevronRight size={16} />
-                    </a>
-                  ))}
-                </section>
-              ) : null}
-              <button
-                className="danger text-button"
-                onClick={() => {
-                  commit({
-                    ...current.current,
-                    records: current.current.records.filter(
-                      (r) => r.id !== item.id,
-                    ),
-                  });
-                  navigate({ type: "collection", id: collection.id });
-                  setNotice(
-                    t(
-                      "Item deleted. Use Undo to restore it.",
-                      "Elemento eliminado. Pulsa Deshacer para recuperarlo.",
-                    ),
-                  );
-                }}
-              >
-                <Trash2 size={16} />
-                {t("Delete item", "Eliminar elemento")}
-              </button>
-            </>
-          ) : (
-            <div className="empty">
-              <p>
-                {t(
-                  "This item is no longer here.",
-                  "Este elemento ya no está aquí.",
-                )}
-              </p>
-              <button
-                className="primary"
-                onClick={() => navigate({ type: "library" })}
-              >
-                {t("Open library", "Abrir biblioteca")}
-              </button>
-            </div>
           )}
         </main>
       </div>
-      <div className={`assistant-wrap ${chat ? "expanded" : ""}`} ref={chatBox}>
-        {chat && (
-          <section
-            className="assistant-panel"
-            aria-label={t("Blue assistant", "Asistente Blue")}
-          >
-            <div className="assistant-title">
-              <div>
-                <span className={`status-dot ${busy ? "thinking" : ""}`} />
-                <strong>
-                  {busy
-                    ? t("Blue is thinking…", "Blue está pensando…")
-                    : "Blue"}
-                </strong>
-              </div>
-              <button
-                className="icon-button"
-                aria-label={t("Close chat", "Cerrar chat")}
-                onClick={() => {
-                  setChat(false);
-                  input.current?.blur();
-                }}
+      <nav className="floating-nav" aria-label={t("Sections", "Secciones")}>
+        {(["notes", "collections", "calendar"] as const).map((s) => {
+          const Icon =
+              s === "notes"
+                ? FileText
+                : s === "collections"
+                  ? List
+                  : CalendarDays,
+            label =
+              s === "notes"
+                ? t("Notes", "Notas")
+                : s === "collections"
+                  ? t("Collections", "Colecciones")
+                  : t("Calendar", "Calendario");
+          return (
+            <button
+              key={s}
+              className={scope === s && !chat ? "selected" : ""}
+              aria-label={label}
+              aria-current={scope === s && !chat ? "page" : undefined}
+              onClick={() => navigate(s)}
+            >
+              <Icon size={20} />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+        <button
+          className={`blue-tab ${chat ? "selected" : ""}`}
+          aria-label={t("Talk to Blue", "Hablar con Blue")}
+          onClick={() => setChat(!chat)}
+        >
+          <BlueMark small />
+        </button>
+      </nav>
+      {item && (
+        <Sheet
+          title={item.title}
+          heading={
+            <EditableText
+              value={item.title}
+              label={t("Title", "Título")}
+              large
+              save={(title) => changeItem(item, { title })}
+            />
+          }
+          close={() => setDetail(undefined)}
+        >
+          <div className="detail-properties">
+            {controls(
+              item,
+              library.collections.find((c) => c.id === item.collectionID)!,
+              undefined,
+              true,
+            )}
+          </div>
+          <MarkdownBody
+            value={text(item.markdown, language)}
+            language={language}
+            save={(body) => changeItem(item, { markdown: userText(body) })}
+          />
+          {item.sources?.map((source) => (
+            <section className="source-facts" key={source.url}>
+              <p>{source.summary}</p>
+              <a
+                className="source-link"
+                href={safeLink(source.url)}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="assistant-content" aria-live="polite">
-              {lastPrompt && <p className="your-prompt">{lastPrompt}</p>}
-              {busy ? (
-                <div className="thinking-line">
-                  <LoaderCircle className="spin" size={18} />
-                  {t("Thinking…", "Pensando…")}
-                </div>
-              ) : chatError ? (
-                <p className="chat-error" role="alert">
-                  {chatError}
-                </p>
-              ) : result ? (
-                <>
-                  {result.answer && markdown(result.answer._0)}
-                  {message && <p>{message}</p>}
-                  {resultRecords.map((r) => (
-                    <button
-                      className="result-card"
-                      key={r.id}
-                      onClick={() => navigate({ type: "item", id: r.id })}
-                    >
-                      <span>
-                        <strong>{r.title}</strong>
-                        {properties(
-                          r,
-                          library.collections.find(
-                            (c) => c.id === r.collectionID,
-                          )!,
-                        )}
-                      </span>
-                      <ChevronRight size={18} />
-                    </button>
-                  ))}
-                  {resultNotes.map((n) => (
-                    <button
-                      className="result-card"
-                      key={n.id}
-                      onClick={() => navigate({ type: "note", id: n.id })}
-                    >
-                      <FileText size={18} />
-                      <strong>{text(n.title, language)}</strong>
-                      <ChevronRight size={18} />
-                    </button>
-                  ))}
-                  {resultCollection && (
-                    <button
-                      className="result-card"
-                      onClick={() => {
-                        navigate({
-                          type: "collection",
-                          id: resultCollection.id,
-                        });
-                        if (result?.collectionView) {
-                          setQuery(result.collectionView._1);
-                          setSearch(result.collectionView._1.search || "");
-                        }
-                      }}
-                    >
-                      <Symbol name={resultCollection.symbol} />
-                      <strong>{text(resultCollection.title, language)}</strong>
-                      <ChevronRight size={18} />
-                    </button>
-                  )}
-                  {result.confirmCollectionChange && (
-                    <div className="confirmation">
-                      <h3>
-                        {t(
-                          "Remove saved information?",
-                          "¿Eliminar información guardada?",
-                        )}
-                      </h3>
-                      <p>
-                        {result.confirmCollectionChange._0.original.fields
-                          .filter(
-                            (f) =>
-                              !result.confirmCollectionChange!._0.proposed.fields.some(
-                                (p) => p.id === f.id,
-                              ),
-                          )
-                          .map((f) => text(f.label, language))
-                          .join(", ")}
-                      </p>
-                      <p className="muted">
-                        {t(
-                          "These fields and their values will be removed from every item in this collection.",
-                          "Estos campos y sus valores se eliminarán de todos los elementos de la colección.",
-                        )}
-                      </p>
-                      <div className="choice-row">
-                        <button className="primary" onClick={approveChange}>
-                          {t("Remove fields", "Eliminar campos")}
-                        </button>
-                        <button
-                          className="choice"
-                          onClick={() => setResult(undefined)}
-                        >
-                          {t("Keep them", "Conservarlos")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="muted">
-                  {t(
-                    "What would you like to save or change?",
-                    "¿Qué quieres guardar o cambiar?",
-                  )}
-                </p>
-              )}
-            </div>
-          </section>
-        )}
-        <form className="assistant-dock" onSubmit={send}>
+                {source.title}
+              </a>
+            </section>
+          ))}
           <button
-            type="button"
-            className="assistant-character"
-            aria-label={t("Open Blue chat", "Abrir chat de Blue")}
-            onClick={() => {
-              setChat(!chat);
-              if (!chat) input.current?.focus();
-            }}
+            className="icon-button danger"
+            aria-label={t("Delete item", "Eliminar elemento")}
+            onClick={() => requestDelete("record", item.id, item.title)}
           >
-            <BlueMark small />
+            <Trash2 size={20} />
           </button>
-          <textarea
-            ref={input}
-            aria-label={t("Message Blue", "Mensaje para Blue")}
-            placeholder={
-              listening
-                ? t("Listening…", "Escuchando…")
-                : t("Tell Blue something…", "Cuéntale algo a Blue…")
-            }
-            value={prompt}
-            maxLength={2000}
-            rows={1}
-            onFocus={() => setChat(true)}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                void send();
-              }
-            }}
+        </Sheet>
+      )}
+      {note && (
+        <Sheet
+          title={text(note.title, language)}
+          heading={
+            <EditableText
+              value={text(note.title, language)}
+              label={t("Title", "Título")}
+              large
+              save={(title) => changeNote(note, { title: userText(title) })}
+            />
+          }
+          close={() => setDetail(undefined)}
+        >
+          <FieldControl
+            field={favoriteField}
+            stored={{ flag: { _0: !!note.favorite } }}
+            language={language}
+            save={(v) => changeNote(note, { favorite: v?.flag?._0 || false })}
+          />
+          <MarkdownBody
+            value={text(note.markdown, language)}
+            language={language}
+            save={(body) => changeNote(note, { markdown: userText(body) })}
           />
           <button
-            type="button"
-            className={`icon-button mic ${listening ? "recording" : ""}`}
-            aria-label={
-              listening
-                ? t("Stop dictation", "Detener dictado")
-                : t("Dictate to Blue", "Dictar a Blue")
+            className="icon-button danger"
+            aria-label={t("Delete note", "Eliminar nota")}
+            onClick={() =>
+              requestDelete("note", note.id, text(note.title, language))
             }
-            title={
-              canListen
-                ? t("Browser dictation", "Dictado del navegador")
-                : t("Use keyboard dictation", "Usa el dictado del teclado")
-            }
-            onClick={dictate}
           >
-            {listening ? <MicOff size={20} /> : <Mic size={20} />}
+            <Trash2 size={20} />
+          </button>
+        </Sheet>
+      )}
+      {creating && (
+        <Sheet title={t("Add", "Añadir")} close={() => setCreating(false)}>
+          <button className="menu-line" onClick={addNote}>
+            <FileText />
+            {t("Note", "Nota")}
+          </button>
+          <button className="menu-line" onClick={addCollection}>
+            <List />
+            {t("Collection", "Colección")}
           </button>
           <button
-            className="send"
-            aria-label={t("Send to Blue", "Enviar a Blue")}
-            disabled={busy || !prompt.trim()}
-            type="submit"
+            className="menu-line"
+            onClick={() => {
+              setCreating(false);
+              setEventEditor({ day: selectedDay });
+            }}
           >
-            {busy ? (
-              <LoaderCircle className="spin" size={20} />
-            ) : (
-              <ArrowUp size={20} />
-            )}
+            <CalendarDays />
+            {t("Event", "Evento")}
           </button>
-        </form>
-      </div>
-      {editing?.type === "collection" && (
-        <CollectionEditor
+        </Sheet>
+      )}
+      {newCollection && collection && (
+        <Sheet
+          title={t("Collection", "Colección")}
+          close={() => setNewCollection(undefined)}
+        >
+          <EditableText
+            value={text(collection.title, language)}
+            large
+            label={t("Collection title", "Título de colección")}
+            save={(s) => changeCollection(collection, { title: userText(s) })}
+          />
+        </Sheet>
+      )}
+      {eventEditor && (
+        <EventEditor
+          key={eventEditor.event?.id || eventEditor.day}
+          {...eventEditor}
           language={language}
-          collection={editing.value}
-          close={() => setEditing(undefined)}
-          save={(c) => {
-            if (
-              commit({
-                ...current.current,
-                collections: current.current.collections.some(
-                  (x) => x.id === c.id,
-                )
-                  ? current.current.collections.map((x) =>
-                      x.id === c.id ? c : x,
-                    )
-                  : [...current.current.collections, c],
-              })
-            ) {
-              setEditing(undefined);
-              navigate({ type: "collection", id: c.id });
-            }
-          }}
+          save={saveEvent}
+          remove={removeEvent}
+          close={() => setEventEditor(undefined)}
         />
       )}
-      {editing?.type === "note" && (
-        <NoteEditor
-          language={language}
-          note={editing.value}
-          save={saveNote}
-          close={() => setEditing(undefined)}
-        />
-      )}{" "}
-      {editing?.type === "item" && (
-        <ItemEditor
-          language={language}
-          collection={editing.collection}
-          item={editing.value}
-          save={saveItem}
-          close={() => setEditing(undefined)}
-        />
-      )}{" "}
-      {editing?.type === "indicator" && (
-        <IndicatorEditor
-          language={language}
-          close={() => setEditing(undefined)}
-          save={(f) => {
-            if (
-              commit({
-                ...current.current,
-                collections: current.current.collections.map((c) =>
-                  c.id === editing.collection.id
-                    ? { ...c, fields: [...c.fields, f] }
-                    : c,
-                ),
-              })
-            )
-              setEditing(undefined);
+      {filters && collection && (
+        <Sheet
+          title={t("Filter & sort", "Filtrar y ordenar")}
+          close={() => setFilters(false)}
+        >
+          <input
+            className="search-input"
+            aria-label={t("Search collection", "Buscar en colección")}
+            placeholder={t("Search…", "Buscar…")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="sort-options">
+            {[
+              { id: "title", label: userText(t("Title", "Título")) },
+              ...collection.fields,
+            ].map((f) => (
+              <button
+                className={query.sortField === f.id ? "selected" : ""}
+                key={f.id}
+                onClick={() =>
+                  setQuery((q) => ({
+                    ...q,
+                    sortField: f.id,
+                    ascending: q.sortField === f.id ? !q.ascending : true,
+                  }))
+                }
+              >
+                {text(f.label, language)}{" "}
+                {query.sortField === f.id ? (query.ascending ? "↑" : "↓") : ""}
+              </button>
+            ))}
+          </div>
+          <div className="detail-properties">
+            {fields(collection).map((f) => {
+              const active = query.filters.find((x) => x.fieldID === f.id);
+              const stored: Value | undefined = active?.flag
+                ? { flag: { _0: true } }
+                : active?.minimum !== undefined
+                  ? { number: { _0: active.minimum } }
+                  : active?.after !== undefined
+                    ? { date: { _0: active.after } }
+                    : active?.text
+                      ? f.kind === "status"
+                        ? { option: { _0: active.text } }
+                        : { text: { _0: active.text } }
+                      : undefined;
+              return (
+                <FieldControl
+                  key={f.id}
+                  field={f}
+                  language={language}
+                  filter
+                  stored={stored}
+                  save={(v) =>
+                    setQuery((q) => ({
+                      ...q,
+                      filters: [
+                        ...q.filters.filter((x) => x.fieldID !== f.id),
+                        ...(v?.flag?._0
+                          ? [{ fieldID: f.id, flag: true }]
+                          : v?.number
+                            ? [{ fieldID: f.id, minimum: v.number._0 }]
+                            : v?.date
+                              ? [{ fieldID: f.id, after: v.date._0 }]
+                              : v?.option
+                                ? [{ fieldID: f.id, text: v.option._0 }]
+                                : v?.text
+                                  ? [{ fieldID: f.id, text: v.text._0 }]
+                                  : []),
+                      ],
+                    }))
+                  }
+                />
+              );
+            })}
+          </div>
+          {query.filters.length > 0 && (
+            <button
+              className="plain"
+              onClick={() => setQuery((q) => ({ ...q, filters: [] }))}
+            >
+              {t("Clear filters", "Quitar filtros")}
+            </button>
+          )}
+        </Sheet>
+      )}
+      {chat && (
+        <Sheet
+          title="Blue"
+          close={() => {
+            setChat(false);
+            recognition.current?.stop();
           }}
-        />
+          footer={composer}
+        >
+          <div className="assistant-result" aria-live="polite">
+            {busy ? <LoaderCircle className="spin" /> : null}
+            {chatError && <p role="alert">{chatError}</p>}
+            {(selection?.answer || result?.answer?._0) && (
+              <MarkdownBody
+                language={language}
+                value={selection?.answer || result?.answer?._0 || ""}
+                readOnly
+                save={() => {}}
+              />
+            )}
+            {result?.message && (
+              <p>
+                {(strings as Record<string, { en: string; es: string }>)[
+                  result.message._0
+                ]?.[language] || t("Please clarify.", "Concreta un poco más.")}
+              </p>
+            )}
+            {resultRecords.map((id) => {
+              const r = library.records.find((r) => r.id === id),
+                c =
+                  r && library.collections.find((c) => c.id === r.collectionID);
+              return r && c ? row(r, c, selection?.fields) : null;
+            })}
+            {resultNotes.map((id) => {
+              const n = library.notes.find((n) => n.id === id);
+              return n ? (
+                <section key={id}>
+                  <button
+                    className="result-title"
+                    onClick={() => openDetail("note", id)}
+                  >
+                    {text(n.title, language)}
+                  </button>
+                  <MarkdownBody
+                    language={language}
+                    value={text(n.markdown, language)}
+                    save={(body) => changeNote(n, { markdown: userText(body) })}
+                  />
+                </section>
+              ) : null;
+            })}
+            {resultCollections.map((id) => {
+              const c = library.collections.find((c) => c.id === id);
+              return c ? (
+                <section key={id}>
+                  <button
+                    className="result-title"
+                    onClick={() => openCollection(id)}
+                  >
+                    {text(c.title, language)}
+                  </button>
+                  {result?.collectionView
+                    ? queryItems(
+                        library.records.filter((r) => r.collectionID === id),
+                        result.collectionView._1,
+                        "",
+                        language,
+                      ).map((r) => row(r, c))
+                    : null}
+                </section>
+              ) : null;
+            })}
+            {resultEvents.map((id) => {
+              const e = library.events?.find((e) => e.id === id);
+              return e ? (
+                <button
+                  className="agenda-entry"
+                  key={id}
+                  onClick={() => {
+                    setChat(false);
+                    setEventEditor({ event: e, day: e.day || selectedDay });
+                  }}
+                >
+                  {e.title} ·{" "}
+                  {new Date((e.date + 978307200) * 1000).toLocaleString(
+                    language,
+                  )}
+                </button>
+              ) : null;
+            })}
+            {result?.confirmCollectionChange && (
+              <div className="confirmation-copy">
+                <p>
+                  {t(
+                    "Remove these properties?",
+                    "¿Eliminar estas propiedades?",
+                  )}
+                </p>
+                <p>
+                  {result.confirmCollectionChange._0.original.fields
+                    .filter(
+                      (f) =>
+                        !result.confirmCollectionChange!._0.proposed.fields.some(
+                          (x) => x.id === f.id,
+                        ),
+                    )
+                    .map((f) => text(f.label, language))
+                    .join(", ")}
+                </p>
+                <div className="confirmation-actions">
+                  <button onClick={() => setResult(undefined)}>
+                    {t("Keep", "Conservar")}
+                  </button>
+                  <button className="danger-button" onClick={confirmSchema}>
+                    {t("Delete", "Eliminar")}
+                  </button>
+                </div>
+              </div>
+            )}
+            {result?.confirmDeletion && (
+              <button
+                className="danger-button"
+                onClick={() => {
+                  if (JSON.stringify(current.current) !== resultSnapshot) {
+                    setChatError(
+                      t(
+                        "Content changed. Ask again.",
+                        "El contenido ha cambiado. Pídeselo de nuevo.",
+                      ),
+                    );
+                    return;
+                  }
+                  requestDelete(
+                    result.confirmDeletion!._0.kind,
+                    result.confirmDeletion!._0.id,
+                    t("Delete this content?", "¿Eliminar este contenido?"),
+                  );
+                }}
+              >
+                {t("Review deletion", "Revisar borrado")}
+              </button>
+            )}
+          </div>
+        </Sheet>
       )}
       {settings && (
         <Sheet
-          title={t("Your Blue", "Tu Blue")}
+          title={t("Settings", "Ajustes")}
           close={() => setSettings(false)}
         >
-          <div className="settings-intro">
-            <BlueMark />
-            <h3>
-              {t("A little space. All yours.", "Un pequeño espacio. Muy tuyo.")}
-            </h3>
-          </div>
-          <label>{t("Language", "Idioma")}</label>
-          <div className="choice-row">
+          <div className="sort-options">
             <button
-              className={`choice ${language === "en" ? "selected" : ""}`}
-              aria-pressed={language === "en"}
+              className={language === "en" ? "selected" : ""}
               onClick={() => setLanguage("en")}
             >
               English
             </button>
             <button
-              className={`choice ${language === "es" ? "selected" : ""}`}
-              aria-pressed={language === "es"}
+              className={language === "es" ? "selected" : ""}
               onClick={() => setLanguage("es")}
             >
               Español
             </button>
           </div>
-          <div className="settings-section">
-            <h3>{t("Keep your thoughts safe", "Cuida tus ideas")}</h3>
-            <p>
-              {t(
-                "Your library is stored in this browser. It is separate from the iPhone app and other browsers. Export a backup before clearing Safari data.",
-                "Tu biblioteca se guarda en este navegador. Es independiente de la app del iPhone y de otros navegadores. Exporta una copia antes de borrar los datos de Safari.",
-              )}
-            </p>
-            <button className="create-button" onClick={exportData}>
-              <Download size={18} />
-              {t("Export library", "Exportar biblioteca")}
-            </button>
-            <label className="import-label">
-              {t(
-                "Restore a Blue web backup",
-                "Restaurar una copia de Blue web",
-              )}
-              <input
-                type="file"
-                accept="application/json,.json"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    if (file.size > 2_000_000) throw new Error();
-                    const next = JSON.parse(await file.text());
-                    if (!validLibrary(next)) throw new Error();
-                    if (
-                      window.confirm(
-                        t(
-                          "Replace this browser’s library with this backup?",
-                          "¿Reemplazar la biblioteca de este navegador por esta copia?",
-                        ),
-                      )
-                    ) {
-                      commit(next);
-                      navigate({ type: "library" });
-                      setSettings(false);
-                    }
-                  } catch {
-                    setNotice(
-                      t(
-                        "That file is not a valid Blue web backup.",
-                        "El archivo no es una copia válida de Blue web.",
-                      ),
-                    );
-                  }
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-          <div className="settings-section">
-            <h3>{t("On your Home Screen", "En tu pantalla de inicio")}</h3>
-            <p>
-              {t(
-                "In Safari, tap Share → Add to Home Screen. Open this same site with your ChatGPT account.",
-                "En Safari, pulsa Compartir → Añadir a pantalla de inicio. Abre este sitio con tu cuenta de ChatGPT.",
-              )}
-            </p>
-          </div>
-          <div className="settings-section">
-            <h3>{t("About this preview", "Sobre esta prueba")}</h3>
-            <p>
-              {t(
-                "AI requests send a snapshot of this web library through the protected site to your Mac’s Apple model. The Mac must remain awake. Web enrichment can look up public topic titles on Wikipedia. Browser dictation uses your browser’s speech service.",
-                "Las peticiones de IA envían una copia de esta biblioteca web a través del sitio protegido al modelo de Apple en tu Mac. El Mac debe seguir despierto. El enriquecimiento web puede buscar títulos públicos en Wikipedia. El dictado utiliza el servicio de voz de tu navegador.",
-              )}
-            </p>
-            <p>
-              {t(
-                "Calendar events stay in this browser. They do not ring or send notifications. Device sync is not available.",
-                "Los eventos del calendario se guardan en este navegador. No suenan ni envían notificaciones. No hay sincronización entre dispositivos.",
-              )}
-            </p>
-          </div>
+          <button className="menu-line" onClick={exportData}>
+            <Download size={20} />
+            {t("Export library", "Exportar biblioteca")}
+          </button>
+          <label className="filter-line">
+            {t("Restore a backup", "Restaurar copia")}
+            <input
+              type="file"
+              accept="application/json"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const next = JSON.parse(await file.text());
+                  if (!validLibrary(next)) throw new Error();
+                  const snapshot = JSON.stringify(current.current);
+                  setDeletion({
+                    title: t(
+                      "Replace the library with this backup?",
+                      "¿Sustituir la biblioteca por esta copia?",
+                    ),
+                    perform: () => {
+                      if (JSON.stringify(current.current) !== snapshot) return;
+                      if (commit(next)) {
+                        setDeletion(undefined);
+                        setSettings(false);
+                        navigate("all");
+                      }
+                    },
+                  });
+                } catch {
+                  setNotice(t("Invalid backup.", "Copia no válida."));
+                }
+              }}
+            />
+          </label>
+          <p className="settings-copy">
+            {t(
+              "Saved in this browser. AI runs on your Mac; keep it awake. Calendar events do not ring.",
+              "Se guarda en este navegador. La IA funciona en tu Mac; déjalo despierto. Los eventos del calendario no suenan.",
+            )}
+          </p>
         </Sheet>
       )}
-      {filters && collection && (
-        <Sheet
-          title={t("Make it your view", "A tu manera")}
-          close={() => setFilters(false)}
-        >
-          <label>{t("Sort by", "Ordenar por")}</label>
-          <div className="choice-row">
-            {[
-              { id: "title", label: userText(t("Title", "Título")) },
-              ...collection.fields.filter((f) => !boolean(f)),
-            ].map((f) => (
-              <button
-                className={`choice ${query.sortField === f.id ? "selected" : ""}`}
-                aria-pressed={query.sortField === f.id}
-                key={f.id}
-                onClick={() => setQuery((q) => ({ ...q, sortField: f.id }))}
-              >
-                {text(f.label, language)}
-              </button>
-            ))}
-            <button
-              className="choice"
-              onClick={() =>
-                setQuery((q) => ({ ...q, ascending: !q.ascending }))
-              }
-            >
-              {query.ascending ? (
-                <ArrowUp size={16} />
-              ) : (
-                <ArrowDown size={16} />
-              )}{" "}
-              {query.ascending
-                ? t("Ascending", "Ascendente")
-                : t("Descending", "Descendente")}
-            </button>
-          </div>
-          {collection.fields
-            .filter((f) => !boolean(f))
-            .map((f) => (
-              <div className="filter-field" key={f.id}>
-                <label>{text(f.label, language)}</label>
-                {f.kind === "status" ? (
-                  <div className="choice-row">
-                    {f.options.map((o) => (
-                      <button
-                        className={`choice ${query.filters.some((x) => x.fieldID === f.id && x.text === o.id) ? "selected" : ""}`}
-                        key={o.id}
-                        onClick={() =>
-                          setQuery((q) => ({
-                            ...q,
-                            filters: q.filters.some(
-                              (x) => x.fieldID === f.id && x.text === o.id,
-                            )
-                              ? q.filters.filter((x) => x.fieldID !== f.id)
-                              : [
-                                  ...q.filters.filter(
-                                    (x) => x.fieldID !== f.id,
-                                  ),
-                                  { fieldID: f.id, text: o.id },
-                                ],
-                          }))
-                        }
-                      >
-                        {text(o.label, language)}
-                      </button>
-                    ))}
-                  </div>
-                ) : ["number", "rating"].includes(f.kind) ? (
-                  <div className="range-inputs">
-                    {(["minimum", "maximum"] as const).map((bound) => (
-                      <input
-                        key={bound}
-                        type="number"
-                        step="any"
-                        placeholder={
-                          bound === "minimum"
-                            ? t("Min", "Mín")
-                            : t("Max", "Máx")
-                        }
-                        aria-label={`${text(f.label, language)} ${bound}`}
-                        value={
-                          query.filters.find((x) => x.fieldID === f.id)?.[
-                            bound
-                          ] ?? ""
-                        }
-                        onChange={(e) =>
-                          setQuery((q) => {
-                            const filter = {
-                              ...q.filters.find((x) => x.fieldID === f.id),
-                              fieldID: f.id,
-                              [bound]:
-                                e.target.value === ""
-                                  ? undefined
-                                  : Number(e.target.value),
-                            };
-                            return {
-                              ...q,
-                              filters: [
-                                ...q.filters.filter((x) => x.fieldID !== f.id),
-                                ...(filter.minimum === undefined &&
-                                filter.maximum === undefined
-                                  ? []
-                                  : [filter]),
-                              ],
-                            };
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                ) : f.kind !== "date" ? (
-                  <input
-                    value={
-                      query.filters.find((x) => x.fieldID === f.id)?.text || ""
-                    }
-                    placeholder={t("Contains…", "Contiene…")}
-                    onChange={(e) =>
-                      setQuery((q) => ({
-                        ...q,
-                        filters: [
-                          ...q.filters.filter((x) => x.fieldID !== f.id),
-                          ...(e.target.value
-                            ? [{ fieldID: f.id, text: e.target.value }]
-                            : []),
-                        ],
-                      }))
-                    }
-                  />
-                ) : (
-                  <p className="muted">
-                    {t(
-                      "Ask Blue to filter by date.",
-                      "Pide a Blue que filtre por fecha.",
-                    )}
-                  </p>
-                )}
-              </div>
-            ))}
-          <button className="primary" onClick={() => setFilters(false)}>
-            <Check size={18} />
-            {t("Done", "Listo")}
-          </button>
-        </Sheet>
+      {deletion && (
+        <Confirm
+          language={language}
+          title={deletion.title}
+          confirm={deletion.perform}
+          cancel={() => setDeletion(undefined)}
+        />
       )}
     </>
   );

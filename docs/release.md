@@ -17,8 +17,8 @@ Free Personal Team provisioning is temporary. Apple states that App IDs, registe
 
 ## Device checks
 
-- Confirm English/Spanish switching with an unsaved note and with a collection filter active.
-- Edit a rating, terminate Blue, reopen, and confirm persistence.
+- Confirm English/Spanish switching while editing a note and with a collection filter active.
+- Tap a rating, scroll the number picker, dismiss it, terminate Blue and confirm persistence. Create a calendar event through + and check the day sheet after relaunch.
 - On an Apple Intelligence-compatible iPhone with its local model ready, enable Airplane Mode and ask Blue to read Interstellar's rating, then change it. Verify the actual row and relaunch. Manual functionality works on iPhones without that model.
 - Create an alarm a few minutes ahead, grant the AlarmKit permission, lock the phone, and verify delivery. Check silent/Focus modes, permission denial, disable/delete, recurrence and time-zone changes. Personal Team installation itself does not establish these behaviors.
 - Review Dynamic Type, VoiceOver reading order, Reduce Motion and keyboard interactions on the real display.

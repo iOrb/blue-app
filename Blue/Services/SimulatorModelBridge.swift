@@ -8,6 +8,9 @@ import Foundation
         var collectionID: UUID?
         var noteID: UUID?
         var library: LibraryState
+        var surface: String? = nil
+        var selectedDay: String? = nil
+        var eventID: UUID? = nil
     }
     struct ModelBridgeResponse: Codable, Sendable {
         var library: LibraryState
@@ -27,14 +30,14 @@ import Foundation
         static var isConfigured: Bool { token?.isEmpty == false }
         @MainActor static func respond(
             prompt: String, language: AppLanguage, previousRecord: UUID?, collectionID: UUID?, noteID: UUID?,
-            store: LibraryStore
+            store: LibraryStore, surface: String = "all", selectedDay: String? = nil, eventID: UUID? = nil
         ) async throws -> (result: AssistantResult, changed: Bool) {
             guard let token else { throw BlueError.modelUnavailable }
             let snapshot = store.state
             let payload = ModelBridgeRequest(
                 prompt: prompt, language: language, previousRecord: previousRecord, collectionID: collectionID,
                 noteID: noteID,
-                library: snapshot)
+                library: snapshot, surface: surface, selectedDay: selectedDay, eventID: eventID)
             var request = URLRequest(url: URL(string: "http://127.0.0.1:7977/respond")!, timeoutInterval: 100)
             request.httpMethod = "POST"
             request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -49,7 +52,7 @@ import Foundation
             try Task.checkCancellation()
             let changed = snapshot != reply.library
             if changed {
-                guard MutationIntent.isExplicit(prompt), store.state == snapshot,
+                guard store.state == snapshot,
                     reply.library.alarms == snapshot.alarms
                 else { throw BlueError.staleRevision }
                 for collection in reply.library.collections { try Validation.collection(collection) }
@@ -62,6 +65,16 @@ import Foundation
                             throw BlueError.invalidValue
                         }
                         try Validation.field(field, value: value)
+                    }
+                }
+                for event in reply.library.events ?? [] { try Validation.event(event) }
+                for note in reply.library.notes {
+                    if note.title.key == nil {
+                        try Validation.title(note.title.english)
+                        try Validation.title(note.title.spanish)
+                    }
+                    guard note.markdown.english.count <= 20000, note.markdown.spanish.count <= 20000 else {
+                        throw BlueError.invalidValue
                     }
                 }
                 try store.update { $0 = reply.library }

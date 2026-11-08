@@ -37,6 +37,7 @@ enum FieldKind: String, Codable, CaseIterable, Sendable {
 struct FieldOption: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var label: LocalText
+    var icon: String?
 }
 
 enum IndicatorTint: String, Codable, CaseIterable, Sendable {
@@ -51,6 +52,10 @@ struct FieldDefinition: Codable, Hashable, Identifiable, Sendable {
     var showInRow = false
     var icon: String?
     var tint: IndicatorTint?
+    var inactiveOptionID: String?
+    var minimum: Double?
+    var maximum: Double?
+    var step: Double?
 }
 
 enum FieldValue: Codable, Hashable, Sendable {
@@ -126,6 +131,33 @@ struct SavedAlarm: Codable, Hashable, Identifiable, Sendable {
     var revision = 0
 }
 
+struct CalendarEvent: Codable, Hashable, Identifiable, Sendable {
+    var id = UUID()
+    var title: String
+    var date: Date
+    var day: String?
+    var allDay = false
+    var color = "blue"
+    var revision = 0
+}
+
+struct PendingDeletion: Codable, Equatable, Sendable {
+    var kind: String
+    var id: UUID
+    var revision: Int?
+    var collection: Collection?
+    var recordRevisions: [UUID: Int]?
+}
+
+struct AssistantSelection: Codable, Equatable, Sendable {
+    var records: [UUID] = []
+    var notes: [UUID] = []
+    var collections: [UUID] = []
+    var events: [UUID] = []
+    var fields: [String] = []
+    var answer = ""
+}
+
 struct LibraryState: Codable, Equatable, Sendable {
     var formatVersion = 2
     var folders: [Folder] = []
@@ -133,6 +165,7 @@ struct LibraryState: Codable, Equatable, Sendable {
     var records: [Record] = []
     var notes: [Note] = []
     var alarms: [SavedAlarm] = []
+    var events: [CalendarEvent]? = []
 }
 
 enum BlueError: Error, Equatable {
@@ -225,13 +258,17 @@ enum Validation {
         case (.text, .text(let value)): valid = value.count <= 10_000
         case (.number, .number(let value)): valid = value.isFinite
         case (.rating, .number(let value)): valid = value.isFinite && (0...10).contains(value)
-        case (.date, .date): valid = true
+        case (.date, .date(let date)): valid = date.timeIntervalSinceReferenceDate.isFinite
         case (.status, .option(let id)): valid = field.options.contains { $0.id == id }
         case (.checkbox, .flag), (.favorite, .flag), (.like, .flag): valid = true
         case (.tags, .tags(let tags)): valid = tags.count <= 30 && tags.allSatisfy { $0.count <= 80 }
         default: valid = false
         }
         guard valid else { throw BlueError.invalidValue }
+        if case .number(let number) = value {
+            if let minimum = field.minimum, number < minimum { throw BlueError.invalidValue }
+            if let maximum = field.maximum, number > maximum { throw BlueError.invalidValue }
+        }
     }
 
     static func icon(_ value: String) throws {
@@ -246,6 +283,14 @@ enum Validation {
         }
         for field in collection.fields {
             if let icon = field.icon { try self.icon(icon) }
+            for value in [field.minimum, field.maximum, field.step].compactMap({ $0 }) {
+                guard value.isFinite, abs(value) <= 1_000_000 else { throw BlueError.invalidValue }
+            }
+            if let step = field.step, step <= 0 { throw BlueError.invalidValue }
+            if let min = field.minimum, let max = field.maximum, min > max { throw BlueError.invalidValue }
+            if let inactive = field.inactiveOptionID, !field.options.contains(where: { $0.id == inactive }) {
+                throw BlueError.invalidValue
+            }
             guard !field.id.isEmpty, field.id.count <= 80 else { throw BlueError.invalidValue }
             if field.label.key == nil {
                 guard !field.label.english.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -258,6 +303,7 @@ enum Validation {
                     Set(field.options.map(\.id)).count == field.options.count
                 else { throw BlueError.invalidValue }
                 for option in field.options {
+                    if let icon = option.icon { try self.icon(icon) }
                     guard !option.id.isEmpty, option.id.count <= 80 else { throw BlueError.invalidValue }
                     if option.label.key == nil {
                         guard !option.label.english.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -270,6 +316,21 @@ enum Validation {
         }
     }
 
+    static func event(_ event: CalendarEvent) throws {
+        try title(event.title)
+        guard event.date.timeIntervalSinceReferenceDate.isFinite, event.revision >= 0,
+            IndicatorTint(rawValue: event.color) != nil
+        else { throw BlueError.invalidValue }
+        if let day = event.day {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.isLenient = false
+            guard day.count == 10, let date = formatter.date(from: day), formatter.string(from: date) == day else {
+                throw BlueError.invalidValue
+            }
+        }
+    }
     static func folder(parentID: UUID?, in folders: [Folder]) throws {
         if let parentID {
             guard let parent = folders.first(where: { $0.id == parentID }) else { throw BlueError.missing }
@@ -280,88 +341,5 @@ enum Validation {
     static func title(_ value: String) throws {
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw BlueError.emptyTitle }
         guard value.count <= 240 else { throw BlueError.invalidValue }
-    }
-}
-
-/// A model can only receive write tools after an explicit user action word.
-/// Unknown phrasing fails closed; inference still chooses and validates every tool argument.
-enum MutationIntent {
-    static func isExplicit(_ prompt: String) -> Bool {
-        let text = prompt.folding(
-            options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX")
-        ).lowercased().replacingOccurrences(of: "’", with: "'")
-        let words = text.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-        guard let first = words.first else { return false }
-        if [
-            "what", "why", "how", "when", "where", "who", "which", "que", "como", "cuando", "donde", "quien", "cual",
-            "no", "never", "nunca",
-        ].contains(first) {
-            return false
-        }
-        if text.contains("don't") || text.contains("do not") || text.contains("no cambies") { return false }
-        let actions: Set<String> = [
-            "change", "set", "update", "add", "create", "make", "delete", "remove", "rename", "move", "cancel",
-            "schedule", "enable", "disable", "mark", "rate", "save", "cambia", "cambiar", "pon", "ponle", "poner",
-            "actualiza", "actualizar", "anade", "anadir", "agrega", "crea", "crear", "haz", "hacer", "elimina",
-            "eliminar", "borra", "borrar", "quita", "renombra", "mueve", "programa", "activa", "desactiva", "marca",
-            "puntua", "guarda", "modifica", "modify", "personaliza", "apunta", "anota", "rellena", "completa",
-            "enriquece", "fill", "enrich", "complete",
-            "capture", "edit", "editar", "edita", "replace", "reemplaza", "reemplazar", "sustituye", "sustituir",
-        ]
-        return !actions.isDisjoint(with: words)
-    }
-}
-
-/// Prevent numeric drift (especially Spanish decimal commas) and unsupported personal values.
-enum UserValueEvidence {
-    static func contains(number: Double, in prompt: String) -> Bool {
-        let expression = try! NSRegularExpression(pattern: "[+-]?[0-9]+(?:[.,][0-9]+)?")
-        let range = NSRange(prompt.startIndex..., in: prompt)
-        for match in expression.matches(in: prompt, range: range) {
-            if let range = Range(match.range, in: prompt),
-                Double(prompt[range].replacingOccurrences(of: ",", with: ".")) == number
-            {
-                return true
-            }
-        }
-        for locale in ["en_US", "es_ES"] {
-            let formatter = NumberFormatter()
-            formatter.locale = Locale(identifier: locale)
-            formatter.numberStyle = .spellOut
-            if prompt.components(separatedBy: .whitespacesAndNewlines).contains(where: {
-                formatter.number(from: $0)?.doubleValue == number
-            }) {
-                return true
-            }
-        }
-        return false
-    }
-}
-
-enum PublicLookupIntent {
-    static func allowed(prompt: String, collectionName: String) -> Bool {
-        let text = (prompt + " " + collectionName).folding(
-            options: [.caseInsensitive, .diacriticInsensitive], locale: .init(identifier: "en_US"))
-        let words = Set(text.components(separatedBy: CharacterSet.alphanumerics.inverted))
-        return !Set([
-            "web", "wikipedia", "internet", "online", "movie", "movies", "film", "films", "pelicula", "peliculas",
-            "peli", "pelis", "series", "tv", "game", "games", "juego", "juegos", "artist", "artists", "artista",
-            "artistas", "album", "book", "books", "libro", "libros", "restaurant", "restaurants", "restaurante",
-            "restaurantes",
-        ]).isDisjoint(with: words)
-    }
-}
-
-enum MarkdownRequest {
-    static func preservingFormat(_ markdown: String, prompt: String, existing: String = "") -> String {
-        let wantsChecklist =
-            ["checklist", "check list", "casillas", "lista de tareas"].contains {
-                prompt.localizedCaseInsensitiveContains($0)
-            } || existing.contains("- [")
-        guard wantsChecklist else { return markdown }
-        return markdown.components(separatedBy: "\n").map { line in
-            if line.hasPrefix("- ") && !line.hasPrefix("- [") { return "- [ ] " + line.dropFirst(2) }
-            return line
-        }.joined(separator: "\n")
     }
 }

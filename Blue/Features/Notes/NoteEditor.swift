@@ -5,115 +5,87 @@ struct NoteEditor: View {
     @Environment(LibraryStore.self) private var store
     @Environment(Localizer.self) private var l
     @Environment(\.dismiss) private var dismiss
+    @State private var draft: Note?
     @State private var title = ""
     @State private var markdown = ""
-    @State private var initialTitle = ""
-    @State private var initialMarkdown = ""
-    @State private var favorite = false
-    @State private var original: Note?
-    @State private var loaded = false
-    @State private var preview = false
     @State private var error: String?
     @State private var confirmDelete = false
-    @State private var confirmDiscard = false
     var body: some View {
-        Form {
-            TextField(l("title"), text: $title).font(.title2.weight(.medium)).accessibilityIdentifier("noteTitle")
-            IndicatorControl(field: .favoriteIndicator, selected: favorite, showsLabel: true) {
-                favorite.toggle()
-            }.accessibilityIdentifier("noteFavorite")
-            Section {
-                if preview {
-                    MarkdownView(text: $markdown)
-                } else {
-                    TextEditor(text: $markdown).frame(minHeight: 280).font(.body.monospaced()).accessibilityLabel(
-                        l("note.markdown")
-                    ).accessibilityIdentifier("noteBody")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let draft {
+                    IndicatorControl(field: .favoriteIndicator, selected: draft.favorite == true) {
+                        self.draft?.favorite = !(draft.favorite ?? false)
+                        save()
+                    }.accessibilityIdentifier("noteFavorite")
+                    EditableMarkdown(
+                        text: Binding(
+                            get: { markdown },
+                            set: {
+                                markdown = $0
+                                save()
+                            }))
                 }
+                ErrorLine(key: error)
+            }.padding(24).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
+        }.scrollDismissesKeyboard(.interactively).background(Color(uiColor: .systemBackground))
+            .navigationBarTitleDisplayMode(.inline).modifier(KeyboardDismissToolbar())
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    TextField(
+                        l("title"),
+                        text: Binding(
+                            get: { title },
+                            set: {
+                                title = $0
+                                save()
+                            })
+                    )
+                    .font(.title2.weight(.semibold)).accessibilityIdentifier("noteTitle")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    QuietButton(key: "delete", symbol: "trash") { confirmDelete = true }
+                }.sharedBackgroundVisibility(.hidden)
             }
-            ErrorLine(key: error)
-            if noteID != nil { Button(l("note.delete"), role: .destructive) { confirmDelete = true } }
-        }
-        .modifier(KeyboardDismissToolbar()).navigationTitle(l("note.editor")).navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden()
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(l("cancel")) {
-                    if title != initialTitle || markdown != initialMarkdown || favorite != (original?.favorite ?? false)
-                    {
-                        confirmDiscard = true
-                    } else {
+            .confirmationDialog(l("note.confirmDelete"), isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button(l("delete"), role: .destructive) {
+                    guard let draft else { return }
+                    do {
+                        try store.confirmDeletion(PendingDeletion(kind: "note", id: draft.id, revision: draft.revision))
                         dismiss()
-                    }
+                    } catch { self.error = (error as? BlueError ?? .saveFailed).key }
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    preview.toggle()
-                } label: {
-                    Image(systemName: preview ? "pencil" : "eye")
-                }.accessibilityLabel(l(preview ? "edit" : "preview")).accessibilityIdentifier("noteToggleEdit")
+            .onAppear {
+                guard draft == nil else { return }
+                draft =
+                    store.state.notes.first { $0.id == noteID }
+                    ?? Note(title: .user(l("untitled")), markdown: .user(""))
+                title = draft.map { l.text($0.title) } ?? ""
+                markdown = draft.map { l.text($0.markdown) } ?? ""
+                if noteID == nil { save() }
             }
-            ToolbarItem(placement: .topBarTrailing) { SettingsButton() }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(l("save"), action: save).accessibilityIdentifier("noteSave")
+            .onChange(of: l.language) { _, _ in
+                guard let draft else { return }
+                title = l.text(draft.title)
+                markdown = l.text(draft.markdown)
             }
-        }
-        .confirmationDialog(l("discard.title"), isPresented: $confirmDiscard, titleVisibility: .visible) {
-            Button(l("discard"), role: .destructive) { dismiss() }
-        }
-        .confirmationDialog(l("note.confirmDelete"), isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button(l("delete"), role: .destructive) {
-                do {
-                    try store.update { $0.notes.removeAll { $0.id == noteID } }
-                    dismiss()
-                } catch { self.error = BlueError.saveFailed.key }
+            .onChange(of: store.state.notes.first { $0.id == draft?.id }?.revision) { _, _ in
+                guard error == nil, let fresh = store.state.notes.first(where: { $0.id == draft?.id }) else { return }
+                draft = fresh
+                title = l.text(fresh.title)
+                markdown = l.text(fresh.markdown)
             }
-        }
-        .onAppear {
-            guard !loaded else { return }
-            loaded = true
-            original = store.state.notes.first { $0.id == noteID }
-            preview = noteID != nil
-            title = original.map { l.text($0.title) } ?? ""
-            markdown = original.map { l.text($0.markdown) } ?? ""
-            favorite = original?.favorite ?? false
-            initialTitle = title
-            initialMarkdown = markdown
-        }
-        .onChange(of: store.state.notes.first { $0.id == noteID }?.revision) { _, _ in
-            guard let fresh = store.state.notes.first(where: { $0.id == noteID }),
-                title == initialTitle, markdown == initialMarkdown, favorite == (original?.favorite ?? false)
-            else { return }
-            original = fresh
-            title = l.text(fresh.title)
-            markdown = l.text(fresh.markdown)
-            favorite = fresh.favorite ?? false
-            initialTitle = title
-            initialMarkdown = markdown
-        }
-        .onChange(of: l.language) { _, _ in
-            if title == initialTitle, let text = original?.title {
-                title = l.text(text)
-                initialTitle = title
-            }
-            if markdown == initialMarkdown, let text = original?.markdown {
-                markdown = l.text(text)
-                initialMarkdown = markdown
-            }
-        }
     }
     private func save() {
+        guard var next = draft, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if title != l.text(next.title) { next.title = .user(title) }
+        if markdown != l.text(next.markdown) { next.markdown = .user(markdown) }
         do {
-            try Validation.title(title)
-            let note = Note(
-                id: noteID ?? UUID(),
-                title: title == initialTitle ? original?.title ?? .user(title) : .user(title),
-                markdown: markdown == initialMarkdown ? original?.markdown ?? .user(markdown) : .user(markdown),
-                favorite: favorite,
-                revision: original?.revision ?? 0)
-            try store.saveNote(note, expectedRevision: original?.revision)
-            dismiss()
+            try store.saveNote(
+                next, expectedRevision: store.state.notes.contains { $0.id == next.id } ? next.revision : nil)
+            draft = store.state.notes.first { $0.id == next.id }
+            error = nil
         } catch { self.error = (error as? BlueError ?? .saveFailed).key }
     }
 }

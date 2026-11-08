@@ -4,34 +4,6 @@ import Testing
 @testable import Blue
 
 struct DomainTests {
-    @Test func explicitNoteEditingVerbsAuthorizeChanges() {
-        for prompt in [
-            "Edit my Safari note", "Replace the second paragraph", "Edita mi nota de viajes", "Puedes editar esta nota",
-            "Sustituye el título", "Reemplaza el último párrafo",
-        ] {
-            #expect(MutationIntent.isExplicit(prompt))
-        }
-        for prompt in [
-            "How do I edit a note?", "Do not replace this note", "No edites mi nota", "¿Cómo puedo editar una nota?",
-        ] {
-            #expect(!MutationIntent.isExplicit(prompt))
-        }
-    }
-    @Test func readQuestionsAndNegationsCannotAuthorizeWrites() {
-        for prompt in [
-            "What rating did I give Interstellar?", "¿Qué puntuación le puse a Interstellar?", "Don't change Dune",
-            "Don’t change Dune", "Never change Dune",
-            "No cambies la nota", "Why did you change this?",
-        ] {
-            #expect(!MutationIntent.isExplicit(prompt))
-        }
-        for prompt in [
-            "Change Interstellar's rating to 10", "Ponle un 8,5 a Interstellar", "¿Puedes crear una nota?",
-            "Make a hiking collection",
-        ] {
-            #expect(MutationIntent.isExplicit(prompt))
-        }
-    }
     @Test func ratingsRejectInvalidNumbers() throws {
         let field = FieldDefinition(id: "rating", label: .key("field.rating"), kind: .rating)
         #expect(throws: BlueError.invalidValue) { try Validation.field(field, value: .number(11)) }
@@ -126,16 +98,6 @@ struct PersistenceTests {
         let reopened = try LibraryStore(url: url)
         #expect(reopened.state.records.isEmpty)
         #expect(reopened.state.folders.isEmpty)
-    }
-    @Test func undoRestoresRecordsButPreservesSystemAlarmState() throws {
-        let store = try LibraryStore(inMemory: true)
-        let before = store.state.records.count
-        try store.update { $0.records.removeFirst() }
-        let alarm = SavedAlarm(title: "Test", date: Date().addingTimeInterval(3600))
-        try store.update(undoable: false) { $0.alarms.append(alarm) }
-        try store.undo()
-        #expect(store.state.records.count == before)
-        #expect(store.state.alarms == [alarm])
     }
     @Test func exactNavigationRemovesOnlyConflictingFilters() throws {
         let store = try LibraryStore(inMemory: true)
@@ -272,11 +234,7 @@ struct PersistenceTests {
         #expect(migrated.records.first { $0.id == note.id }?.favorite == true)
         #expect(migrated.notes.count == original.notes.count - 1)
         #expect(LibraryStore.flattened(migrated) == migrated)
-        let store = try LibraryStore(inMemory: true)
-        let before = store.state
-        try store.update { $0.records.removeFirst() }
-        try store.undo()
-        #expect(store.state == before)
+
     }
 
     @Test func captureAndAdaptiveFieldsAreAtomicAndTyped() async throws {
@@ -375,12 +333,6 @@ struct PersistenceTests {
         #expect(!removing.didMutate)
     }
 
-    @Test func numericEvidencePreservesSpanishDecimals() {
-        #expect(UserValueEvidence.contains(number: 8.5, in: "Ponle un 8,5"))
-        #expect(!UserValueEvidence.contains(number: 85, in: "Ponle un 8,5"))
-        #expect(UserValueEvidence.contains(number: 5, in: "Save distance five"))
-    }
-
     @Test func favoritesDecodeOldRecordsAndPersistNewOnes() throws {
         let store = try LibraryStore(inMemory: true)
         var record = try #require(store.state.records.first)
@@ -466,7 +418,7 @@ struct AlarmTests {
         let date = Date(timeIntervalSince1970: 1_794_225_600)
         let weekly = SavedAlarm(title: "Weekly", date: date, weekdays: [2], timeZoneID: "Europe/Madrid")
         let fixed = SavedAlarm(title: "Fixed", date: date, timeZoneID: "Europe/Madrid")
-        try store.update(undoable: false) { $0.alarms = [weekly, fixed] }
+        try store.update { $0.alarms = [weekly, fixed] }
         let target = TimeZone(identifier: "America/New_York")!
         AlarmService(store: store, scheduler: scheduler).reconcile(timeZone: target, now: date)
         var oldCalendar = Calendar(identifier: .gregorian)

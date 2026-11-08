@@ -31,7 +31,7 @@ struct DescribeCollectionTool: Tool {
 struct ModifyCollectionTool: Tool {
     let name = "modifyCollection"
     let description =
-        "Modify a previously described collection: add/change/remove fields, change field icons and colors, or the collection icon/name. For custom yes/no indicators use checkbox with the exact user meaning, emoji icon and color. Unfilled field removal is immediate; removal of saved values requires confirmation in the app."
+        "Modify a previously described collection: add/change/remove fields, change field icons and colors, or the collection icon/name. For custom yes/no indicators use checkbox with the exact user meaning, emoji icon and color. Every field removal requires confirmation in the app."
     let context: ToolContext
     @Generable struct Arguments {
         var collectionID: String
@@ -78,7 +78,7 @@ struct ModifyCollectionTool: Tool {
                 return (try? Validation.field(field, value: value)) == nil
             }
         }
-        if losesValues {
+        if losesValues || !arguments.removeFieldIDs.isEmpty {
             context.result = .confirmCollectionChange(
                 PendingCollectionChange(
                     original: original, proposed: proposed,
@@ -95,7 +95,7 @@ struct ModifyCollectionTool: Tool {
 struct EditNoteTool: Tool {
     let name = "editNote"
     let description =
-        "Edit a previously read Markdown note. Preserve unrelated content. Return complete Markdown with the requested edits, not an explanation."
+        "Edit a previously read Markdown note. Preserve unrelated content and its original language. Do not translate unless asked. Return complete Markdown with the requested edits, not an explanation."
     let context: ToolContext
     @Generable struct Arguments {
         var noteID: String
@@ -117,10 +117,7 @@ struct EditNoteTool: Tool {
             try Validation.title(title)
             note.title = .user(title)
         }
-        note.markdown = .user(
-            MarkdownRequest.preservingFormat(
-                arguments.markdown, prompt: context.sourcePrompt,
-                existing: Localizer(language: context.language).text(note.markdown)))
+        note.markdown = .user(arguments.markdown)
         try context.store.saveNote(note, expectedRevision: revision)
         context.didMutate = true
         context.result = .notes([id])

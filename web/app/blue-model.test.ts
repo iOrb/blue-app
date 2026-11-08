@@ -307,3 +307,47 @@ test("calendar persists validated events and projects collection date fields", (
   assert.equal(dateKey(days.at(-1)!), "2026-12-06");
   assert.equal(new Set(days.map(dateKey)).size, 42);
 });
+
+test("validates shared indicator metadata and keeps only type-compatible values in schema changes", async () => {
+  const { compatibleValue } = await import("./blue-model.ts");
+  const numeric = {
+    id: "score",
+    label: userText("Score"),
+    kind: "number" as const,
+    options: [],
+    showInRow: true,
+    minimum: 1,
+    maximum: 5,
+    step: 1,
+  };
+  const library = {
+    ...emptyLibrary(),
+    collections: [{ ...collection, fields: [numeric] }],
+  };
+  assert.equal(validLibrary(library), true);
+  assert.equal(compatibleValue(numeric, { number: { _0: 3 } }), true);
+  assert.equal(compatibleValue(numeric, { number: { _0: 9 } }), false);
+  assert.equal(
+    compatibleValue({ ...numeric, kind: "text" }, { number: { _0: 3 } }),
+    false,
+  );
+  assert.equal(
+    validLibrary({
+      ...library,
+      collections: [{ ...collection, fields: [{ ...numeric, step: 0 }] }],
+    }),
+    false,
+  );
+  assert.equal(
+    validLibrary({
+      ...library,
+      collections: [
+        {
+          ...collection,
+          fields: [{ ...numeric, inactiveOptionID: "missing" }],
+        },
+      ],
+    }),
+    false,
+  );
+});

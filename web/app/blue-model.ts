@@ -23,10 +23,14 @@ export type Field = {
   id: string;
   label: LocalText;
   kind: Kind;
-  options: { id: string; label: LocalText }[];
+  options: { id: string; label: LocalText; icon?: string }[];
   showInRow: boolean;
   icon?: string;
   tint?: string;
+  inactiveOptionID?: string;
+  minimum?: number;
+  maximum?: number;
+  step?: number;
 };
 export type Collection = {
   id: string;
@@ -274,7 +278,17 @@ export function validLibrary(input: unknown): input is Library {
           typeof f.showInRow !== "boolean" ||
           (f.icon !== undefined &&
             (typeof f.icon !== "string" || f.icon.length > 80)) ||
-          (f.tint !== undefined && !colors.includes(f.tint))
+          (f.tint !== undefined && !colors.includes(f.tint)) ||
+          [f.minimum, f.maximum, f.step].some(
+            (n) =>
+              n !== undefined && (!Number.isFinite(n) || Math.abs(n) > 1000000),
+          ) ||
+          (f.step !== undefined && f.step <= 0) ||
+          (f.minimum !== undefined &&
+            f.maximum !== undefined &&
+            f.minimum > f.maximum) ||
+          (f.inactiveOptionID !== undefined &&
+            !f.options.some((o) => o.id === f.inactiveOptionID))
         )
           return false;
         fields.add(f.id);
@@ -283,7 +297,9 @@ export function validLibrary(input: unknown): input is Library {
             (o) =>
               typeof o.id === "string" &&
               o.id.length <= 80 &&
-              validText(o.label, 240),
+              validText(o.label, 240) &&
+              (o.icon === undefined ||
+                (typeof o.icon === "string" && o.icon.length <= 60)),
           )
         )
           return false;
@@ -319,32 +335,7 @@ export function validLibrary(input: unknown): input is Library {
         return false;
       for (const [id, v] of Object.entries(r.values)) {
         const f = c.fields.find((f) => f.id === id);
-        if (!f || !v || Object.keys(v).length !== 1) return false;
-        if (
-          ["number", "rating"].includes(f.kind) &&
-          (!Number.isFinite(v.number?._0) ||
-            (f.kind === "rating" && (v.number!._0 < 0 || v.number!._0 > 10)))
-        )
-          return false;
-        if (boolean(f) && typeof v.flag?._0 !== "boolean") return false;
-        if (
-          f.kind === "status" &&
-          !f.options.some((o) => o.id === v.option?._0)
-        )
-          return false;
-        if (
-          f.kind === "text" &&
-          (typeof v.text?._0 !== "string" || v.text._0.length > 20000)
-        )
-          return false;
-        if (f.kind === "date" && !Number.isFinite(v.date?._0)) return false;
-        if (
-          f.kind === "tags" &&
-          (!Array.isArray(v.tags?._0) ||
-            v.tags._0.length > 50 ||
-            !v.tags._0.every((t) => typeof t === "string" && t.length <= 240))
-        )
-          return false;
+        if (!f || !compatibleValue(f, v)) return false;
       }
     }
     if (
@@ -399,4 +390,33 @@ export function safeLink(url: string) {
   } catch {
     return undefined;
   }
+}
+
+export function compatibleValue(f: Field, v: Value): boolean {
+  if (!v || Object.keys(v).length !== 1) return false;
+  if (
+    ["number", "rating"].includes(f.kind) &&
+    (!Number.isFinite(v.number?._0) ||
+      (f.kind === "rating" && (v.number!._0 < 0 || v.number!._0 > 10)) ||
+      (f.minimum !== undefined && v.number!._0 < f.minimum) ||
+      (f.maximum !== undefined && v.number!._0 > f.maximum))
+  )
+    return false;
+  if (boolean(f) && typeof v.flag?._0 !== "boolean") return false;
+  if (f.kind === "status" && !f.options.some((o) => o.id === v.option?._0))
+    return false;
+  if (
+    f.kind === "text" &&
+    (typeof v.text?._0 !== "string" || v.text._0.length > 10000)
+  )
+    return false;
+  if (f.kind === "date" && !Number.isFinite(v.date?._0)) return false;
+  if (
+    f.kind === "tags" &&
+    (!Array.isArray(v.tags?._0) ||
+      v.tags._0.length > 30 ||
+      !v.tags._0.every((t) => typeof t === "string" && t.length <= 80))
+  )
+    return false;
+  return true;
 }
