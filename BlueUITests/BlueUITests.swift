@@ -42,6 +42,7 @@ final class BlueUITests: XCTestCase {
         XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 10))
         screenshot(app, "assistant-result-english")
         switchToSpanish(app)
+        if !app.buttons["result-Interstellar"].exists { app.buttons["assistantCharacter"].tap() }
         XCTAssertTrue(app.staticTexts["Ir a este elemento"].exists)
         app.buttons["result-Interstellar"].tap()
         XCTAssertTrue(app.navigationBars["Películas"].waitForExistence(timeout: 5))
@@ -58,7 +59,7 @@ final class BlueUITests: XCTestCase {
         app.terminate()
         app = launch(reset: false)
         XCTAssertTrue(app.tabBars.buttons["Notas"].exists)
-        app.buttons["folder-template.movies"].tap()
+        app.buttons["collection-template.movies"].tap()
         let savedRow = app.descendants(matching: .any).matching(identifier: "row-Interstellar").firstMatch
         if !savedRow.isHittable { app.swipeUp() }
         savedRow.tap()
@@ -91,9 +92,8 @@ final class BlueUITests: XCTestCase {
     }
     @MainActor func testFiltersRemainVisibleAndRemovableAcrossLanguageSwitch() {
         let app = launch()
-        app.buttons["folder-template.movies"].tap()
-        app.buttons["collectionOptions"].tap()
-        app.buttons["Filters"].tap()
+        app.buttons["collection-template.movies"].tap()
+        app.buttons["openFilters"].tap()
         app.buttons["filterOption-watched"].tap()
         let rangeSwitch = app.switches["Filter by range"].firstMatch
         for _ in 0..<5 {
@@ -157,9 +157,21 @@ final class BlueUITests: XCTestCase {
     }
     @MainActor func testAccessibilityLabelsAndTouchTargets() throws {
         let app = launch()
-        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .hitRegion])
-        app.buttons["folder-template.movies"].tap()
-        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .hitRegion])
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .hitRegion]) { issue in
+            print("ACCESSIBILITY_ISSUE_ELEMENT=\(issue.element?.debugDescription ?? "unknown")")
+            return false
+        }
+        app.buttons["collection-template.movies"].tap()
+        XCTAssertTrue(app.buttons["collectionOptions"].waitForExistence(timeout: 5))
+        // Audit the settled screen, not accessibility nodes in the navigation transition.
+        Thread.sleep(forTimeInterval: 1)
+        for button in app.buttons.allElementsBoundByIndex where button.isHittable {
+            print("AUDIT_BUTTON \(button.identifier) \(button.frame)")
+        }
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .hitRegion]) { issue in
+            print("ACCESSIBILITY_ISSUE_ELEMENT=\(issue.element?.debugDescription ?? "unknown")")
+            return false
+        }
         app.tabBars.buttons["Calendar"].tap()
         try app.performAccessibilityAudit(for: [.sufficientElementDescription, .hitRegion])
         screenshot(app, "accessibility-calendar")
@@ -171,7 +183,7 @@ final class BlueUITests: XCTestCase {
         )
         let app = launch()
         screenshot(app, "configured-text-library")
-        app.buttons["folder-template.movies"].tap()
+        app.buttons["collection-template.movies"].tap()
         screenshot(app, "configured-text-collection")
         switchToSpanish(app)
         app.buttons["newRecord"].tap()
@@ -183,6 +195,73 @@ final class BlueUITests: XCTestCase {
         app.buttons["recordSave"].tap()
         app.tabBars.buttons["Calendario"].tap()
         screenshot(app, "configured-text-calendar")
+    }
+
+    @MainActor func testChatReturnOutsideTapAndFavorites() {
+        let app = launch()
+        let input = app.textFields["assistantInput"]
+        input.tap()
+        input.typeText("Find Interstellar\n")
+        XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        app.buttons["result-Interstellar"].tap()
+        let favorite = app.buttons["favorite-Interstellar"]
+        for _ in 0..<5 {
+            if favorite.isHittable { break }
+            app.swipeUp()
+        }
+        favorite.tap()
+        XCTAssertEqual(favorite.value as? String, "Yes")
+        input.tap()
+        input.typeText("Keep this draft")
+        app.tabBars.buttons["Calendar"].tap()
+        XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        app.tabBars.buttons["Notes"].tap()
+        XCTAssertEqual(app.textFields["assistantInput"].value as? String, "Keep this draft")
+        app.navigationBars.firstMatch.tap()
+        XCTAssertTrue(app.buttons["assistantMicrophone"].exists)
+        screenshot(app, "chat-dismiss-and-favorite")
+        app.buttons["BackButton"].tap()
+        let favorites = app.buttons["scope-favorites"]
+        XCTAssertTrue(favorites.waitForExistence(timeout: 5))
+        favorites.tap()
+        XCTAssertEqual(favorites.value as? String, "Yes")
+        favorites.tap()
+        XCTAssertEqual(favorites.value as? String, "No")
+        screenshot(app, "library-icon-favorites")
+    }
+
+    @MainActor func testCustomIndicatorsAcrossListDetailAndFilters() {
+        let app = launch()
+        ask(app, "Add Bass and Smoke indicators to Movies")
+        XCTAssertTrue(app.buttons["resultCollection"].waitForExistence(timeout: 15))
+        app.buttons["resultCollection"].tap()
+        let bass = app.buttons["indicator-Aftersun-bass"]
+        XCTAssertTrue(bass.waitForExistence(timeout: 5))
+        bass.tap()
+        XCTAssertEqual(bass.value as? String, "Yes")
+        app.buttons["quickFilter-bass"].tap()
+        XCTAssertTrue(app.buttons["row-Aftersun"].exists)
+        XCTAssertFalse(app.buttons["row-Arrival"].exists)
+        screenshot(app, "custom-indicator-filter")
+        app.buttons["quickFilter-bass"].tap()
+        app.buttons["row-Aftersun"].tap()
+        XCTAssertEqual(app.buttons["field-bass"].value as? String, "Yes")
+        XCTAssertTrue(app.buttons["field-smoke"].exists)
+        screenshot(app, "custom-indicator-detail")
+    }
+
+    @MainActor func testSavedNoteOpensRenderedAndCanBeEdited() {
+        let app = launch()
+        app.buttons["scope-notes"].tap()
+        let note = app.buttons.matching(identifier: "note-A slower kind of Sunday").firstMatch
+        if note.exists { note.tap() } else { app.staticTexts["A slower kind of Sunday"].tap() }
+        XCTAssertTrue(app.buttons["noteToggleEdit"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textViews["noteBody"].exists)
+        app.buttons["noteToggleEdit"].tap()
+        XCTAssertTrue(app.textViews["noteBody"].exists)
+        screenshot(app, "note-manual-edit")
     }
 
 }

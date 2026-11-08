@@ -56,7 +56,7 @@ struct BlueApp: App {
                     return
                 }
             #endif
-            store = try LibraryStore()
+            store = try LibraryStore(seed: false)
         } catch { startupFailed = true }
     }
 }
@@ -93,31 +93,39 @@ struct BlueRoot: View {
                             case .newNote: NoteEditor()
                             case .newCollection: CollectionCreator()
                             case .collectionSettings(let id): CollectionSettings(collectionID: id)
-                            case .folder(let id): FolderEditor(folderID: id)
-                            case .newFolder: FolderEditor()
                             }
                         }
-                }.safeAreaInset(edge: .bottom, spacing: 0) {
+                }.modifier(DismissAssistantOnTap()).safeAreaInset(edge: .bottom, spacing: 0) {
                     if navigation.tab == 0 { AssistantDock() }
                 }
             }
             Tab(l("tab.calendar"), systemImage: "calendar", value: 1) {
-                NavigationStack { CalendarView() }
+                NavigationStack { CalendarView() }.modifier(DismissAssistantOnTap())
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if navigation.tab == 1 { AssistantDock() }
                     }
             }
         }
         .environment(navigation).environment(assistant).environment(alarms)
+        .onChange(of: navigation.tab) { _, _ in
+            navigation.assistantFocused = false
+            navigation.assistantExpanded = false
+        }
         .task {
             alarms.reconcile()
             await alarms.observe()
         }
         .onChange(of: phase) { _, phase in if phase == .active { alarms.reconcile() } }
         .onChange(of: assistant.result) { _, result in
+            guard navigation.assistantExpanded else { return }
             if case .records(let ids, _) = result, ids.count == 1, let id = ids.first, let record = store.record(id) {
                 navigation.jump(to: record, store: store, locale: l.locale)
             }
+        }
+        .onChange(of: navigation.path) { _, path in
+            if case .note(let id) = path.last { assistant.selectNote(id) }
+            if case .record(let id) = path.last { assistant.selectRecord(id) }
+            if case .collection(let id) = path.last { assistant.selectCollection(id, store: store) }
         }
         .onChange(of: l.language) { _, _ in assistant.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in alarms.reconcile() }

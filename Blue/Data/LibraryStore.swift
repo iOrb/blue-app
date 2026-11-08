@@ -62,6 +62,38 @@ final class LibraryStore {
             if seed { state = StarterLibrary.make() }
             try persist(state)
         }
+        if !state.folders.isEmpty {
+            state = Self.flattened(state)
+            try persist(state)
+        }
+    }
+
+    /// Payload migration: remove the legacy container layer without dropping user content.
+    static func flattened(_ original: LibraryState) -> LibraryState {
+        var next = original
+        for folder in original.folders {
+            let existing = next.collections.first { $0.folderID == folder.id }
+            var destination = existing?.id
+            if destination == nil {
+                let collection = Collection(id: folder.id, title: folder.title, fields: [])
+                next.collections.append(collection)
+                destination = collection.id
+            }
+            if let destination {
+                for note in next.notes.filter({ $0.folderID == folder.id }) {
+                    next.records.append(
+                        Record(
+                            id: note.id, collectionID: destination,
+                            title: Localizer(language: .english).text(note.title), markdown: note.markdown,
+                            favorite: note.favorite, revision: note.revision, updatedAt: note.updatedAt))
+                }
+                next.notes.removeAll { $0.folderID == folder.id }
+            }
+        }
+        for index in next.collections.indices { next.collections[index].folderID = nil }
+        next.folders = []
+        next.formatVersion = 2
+        return next
     }
 
     private func persist(_ state: LibraryState) throws {
@@ -147,20 +179,17 @@ final class LibraryStore {
     func setValue(recordID: UUID, fieldID: String, value: FieldValue?, revision: Int) throws {
         guard var record = record(recordID) else { throw BlueError.missing }
         record.values[fieldID] = value
+        if collection(record.collectionID)?.fields.first(where: { $0.id == fieldID })?.kind == .favorite {
+            record.favorite = value?.flag ?? false
+        }
         try saveRecord(record, expectedRevision: revision)
     }
 
     func createCollection(title: String, fields: [FieldDefinition], folderID: UUID? = nil) throws -> UUID {
         try Validation.title(title)
-        let folder = Folder(title: .user(title))
-        let collection = Collection(folderID: folderID ?? folder.id, title: .user(title), fields: fields)
+        let collection = Collection(folderID: folderID, title: .user(title), fields: fields)
         try Validation.collection(collection)
         try update { state in
-            if let folderID {
-                guard state.folders.contains(where: { $0.id == folderID }) else { throw BlueError.missing }
-            } else {
-                state.folders.append(folder)
-            }
             state.collections.append(collection)
         }
         return collection.id
@@ -217,7 +246,7 @@ final class LibraryStore {
     func deleteFolder(_ id: UUID) throws {
         guard state.folders.contains(where: { $0.id == id }) else { throw BlueError.missing }
         let folderIDs = Set([id] + state.folders.filter { $0.parentID == id }.map(\.id))
-        let collectionIDs = Set(state.collections.filter { folderIDs.contains($0.folderID) }.map(\.id))
+        let collectionIDs = Set(state.collections.filter { $0.folderID.map(folderIDs.contains) ?? false }.map(\.id))
         try update { state in
             state.records.removeAll { collectionIDs.contains($0.collectionID) }
             state.collections.removeAll { collectionIDs.contains($0.id) }

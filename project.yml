@@ -34,6 +34,8 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSAlarmKitUsageDescription: Blue schedules the alarms you create, even when your iPhone is locked.
+        NSMicrophoneUsageDescription: Blue uses the microphone only when you tap it to dictate a request.
+        NSSpeechRecognitionUsageDescription: Blue transcribes your voice on this device so you can edit and send it.
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:

@@ -1,5 +1,7 @@
-Blue 1.0 — a quiet home for your notes, collections, and alarms.
+Blue 1.0 — notes, adaptable collections, and alarms.
 
-Try editing an item, filtering a collection, and switching between English and Spanish. On an Apple Intelligence-compatible iPhone, ask Blue for Interstellar's rating, jump to that exact item, and change its rating. Relaunch to verify your changes are saved. Create an alarm and check that it sounds with the iPhone locked.
+Only notes and collections, with existing folder content preserved. Notes open in rendered Markdown and remain editable. Custom visual indicators work consistently in lists, item details, and filters: pale gray when off, colored when on. Favorites use a star.
 
-Notes and requests stay on your device. Install directly from Xcode with your Personal Team.
+Ask Blue to capture items, add or remove fields, change icons, edit notes, and fill basic public facts with Wikipedia source links. Enter sends; tapping outside leaves the chat; the microphone offers on-device dictation when available. Manual editing works independently of model availability.
+
+Install from Xcode with your free Personal Team. Simulator inference can use the explicitly configured local Mac model bridge. Hardware model, microphone, signing, and alarm delivery still require an iPhone check. No TestFlight setup is required.

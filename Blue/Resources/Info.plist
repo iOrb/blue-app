@@ -29,6 +29,10 @@
 	<false/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Blue schedules the alarms you create, even when your iPhone is locked.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Blue uses the microphone only when you tap it to dictate a request.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Blue transcribes your voice on this device so you can edit and send it.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

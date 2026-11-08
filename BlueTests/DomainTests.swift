@@ -142,7 +142,7 @@ struct PersistenceTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let exported = try decoder.decode(LibraryState.self, from: store.export())
-        #expect(exported.formatVersion == 1)
+        #expect(exported.formatVersion == 2)
         #expect(exported.records.map(\.values) == store.state.records.map(\.values))
     }
     @Test func readOnlyContextRejectsModelInitiatedMutation() throws {
@@ -209,6 +209,18 @@ struct PersistenceTests {
         }
         #expect(query.filters.first?.text == "watched")
         #expect(!query.apply(to: store.records(in: id), fields: store.collection(id)!.fields, locale: .current).isEmpty)
+        _ = try await tool.call(
+            arguments: .init(
+                collectionName: "Movies", sortFieldID: "title", ascending: true,
+                filters: [.init(fieldID: "__favorite", text: nil, minimum: nil, maximum: nil, selected: true)]))
+        guard case .collectionView(_, let favorites) = context.result else {
+            Issue.record("Expected a universal favorite filter")
+            return
+        }
+        #expect(favorites.filters.first?.fieldID == "__favorite")
+        #expect(
+            favorites.apply(to: store.records(in: id), fields: store.collection(id)!.fields, locale: .current)
+                .allSatisfy { $0.isFavorite })
     }
     @Test func modelFailureUsesLocalizedAvailabilityMessage() {
         let error = NSError(domain: "com.apple.UnifiedAssetFramework", code: 5000)
@@ -234,17 +246,140 @@ struct PersistenceTests {
         #expect(!assistant.busy)
     }
 
-    @Test func deletingAFolderRemovesOnlyItsContentsAndCanBeUndone() throws {
+    @Test func folderMigrationPreservesCollectionsAndGroupedNotes() throws {
+        var original = StarterLibrary.make()
+        let folder = original.folders[0]
+        let note = Note(folderID: folder.id, title: .user("Keep me"), markdown: .user("Private draft"), favorite: true)
+        original.notes.append(note)
+        let migrated = LibraryStore.flattened(original)
+        #expect(migrated.folders.isEmpty)
+        #expect(migrated.collections.count == original.collections.count)
+        #expect(migrated.collections.allSatisfy { $0.folderID == nil })
+        #expect(migrated.records.first { $0.id == note.id }?.markdown == note.markdown)
+        #expect(migrated.records.first { $0.id == note.id }?.favorite == true)
+        #expect(migrated.notes.count == original.notes.count - 1)
+        #expect(LibraryStore.flattened(migrated) == migrated)
         let store = try LibraryStore(inMemory: true)
         let before = store.state
-        let movie = store.state.records.first { $0.title == "Interstellar" }!
-        let folderID = store.collection(movie.collectionID)!.folderID
-        try store.deleteFolder(folderID)
-        #expect(store.record(movie.id) == nil)
-        #expect(!store.state.records.isEmpty)
-        #expect(store.state.folders.count == before.folders.count - 1)
+        try store.update { $0.records.removeFirst() }
         try store.undo()
         #expect(store.state == before)
+    }
+
+    @Test func captureAndAdaptiveFieldsAreAtomicAndTyped() async throws {
+        let store = try LibraryStore(inMemory: true, seed: false)
+        let context = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: nil)
+        context.mutationsAllowed = true
+        context.lookup = { _ in throw BlueError.webUnavailable }
+        let capture = CaptureItemTool(context: context)
+        _ = try await capture.call(
+            arguments: .init(
+                collectionName: "Places", title: "Small bookshop", markdown: "Visit on Saturday", fields: [],
+                values: [], lookupPublicFacts: true))
+        #expect(store.state.collections.count == 1)
+        #expect(store.state.folders.isEmpty)
+        let record = try #require(store.state.records.first)
+        #expect(record.sources == nil)
+        #expect(record.markdown == .user("Visit on Saturday"))
+        let update = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: record.id)
+        update.mutationsAllowed = true
+        _ = try await AdaptItemTool(context: update).call(
+            arguments: .init(
+                recordID: record.id.uuidString,
+                fields: [
+                    .init(
+                        id: "distance", english: "Distance", spanish: "Distancia", kind: .number, showInRow: true,
+                        options: [])
+                ],
+                values: [.init(fieldID: "distance", value: "3,5")]))
+        #expect(store.record(record.id)?.values["distance"] == .number(3.5))
+        #expect(store.record(record.id)?.markdown == record.markdown)
+        let repeated = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: record.id)
+        repeated.mutationsAllowed = true
+        repeated.sourcePrompt = "Change distance to 4"
+        _ = try await AdaptItemTool(context: repeated).call(
+            arguments: .init(
+                recordID: record.id.uuidString,
+                fields: [
+                    .init(
+                        id: "distance", english: "Distance", spanish: "Distancia", kind: .text, showInRow: true,
+                        options: [])
+                ],
+                values: [.init(fieldID: "distance", value: "4")]))
+        #expect(store.record(record.id)?.values["distance"] == .number(4))
+        #expect(store.collection(record.collectionID)?.fields.first?.kind == .number)
+        let denied = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: record.id)
+        let before = store.state
+        await #expect(throws: BlueError.unsupported) {
+            try await AdaptItemTool(context: denied).call(
+                arguments: .init(recordID: record.id.uuidString, fields: [], values: []))
+        }
+        #expect(store.state == before)
+    }
+
+    @Test func schemaIconsPersistAndDestructiveChangesNeedConfirmation() async throws {
+        let store = try LibraryStore(inMemory: true)
+        let original = try #require(store.state.collections.first)
+        let context = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: nil)
+        context.mutationsAllowed = true
+        context.readCollections[original.id] = original
+        _ = try await ModifyCollectionTool(context: context).call(
+            arguments: .init(
+                collectionID: original.id.uuidString, title: nil, icon: "🚬",
+                fields: [
+                    .init(
+                        id: "bass", english: "Bass", spanish: "Bass", kind: .checkbox, showInRow: true, icon: "🗿",
+                        tint: .purple, options: [])
+                ], removeFieldIDs: []))
+        let updated = try #require(store.collection(original.id))
+        #expect(updated.symbol == "🚬")
+        #expect(updated.fields.first { $0.id == "bass" }?.icon == "🗿")
+        #expect(updated.fields.first { $0.id == "bass" }?.tint == .purple)
+        let removing = ToolContext(
+            store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .english,
+            previous: nil)
+        removing.mutationsAllowed = true
+        removing.readCollections[updated.id] = updated
+        _ = try await ModifyCollectionTool(context: removing).call(
+            arguments: .init(
+                collectionID: updated.id.uuidString, title: nil, icon: nil, fields: [], removeFieldIDs: ["rating"]))
+        #expect(store.collection(updated.id)?.fields.contains { $0.id == "rating" } == true)
+        guard case .confirmCollectionChange(let change) = removing.result else {
+            Issue.record("Missing deletion review")
+            return
+        }
+        #expect(!change.proposed.fields.contains { $0.id == "rating" })
+        #expect(!removing.didMutate)
+    }
+
+    @Test func numericEvidencePreservesSpanishDecimals() {
+        #expect(UserValueEvidence.contains(number: 8.5, in: "Ponle un 8,5"))
+        #expect(!UserValueEvidence.contains(number: 85, in: "Ponle un 8,5"))
+        #expect(UserValueEvidence.contains(number: 5, in: "Save distance five"))
+    }
+
+    @Test func favoritesDecodeOldRecordsAndPersistNewOnes() throws {
+        let store = try LibraryStore(inMemory: true)
+        var record = try #require(store.state.records.first)
+        record.favorite = true
+        try store.saveRecord(record, expectedRevision: record.revision)
+        #expect(store.record(record.id)?.isFavorite == true)
+        var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(record)) as! [String: Any]
+        encoded.removeValue(forKey: "favorite")
+        encoded.removeValue(forKey: "sources")
+        let old = try JSONDecoder().decode(Record.self, from: JSONSerialization.data(withJSONObject: encoded))
+        #expect(old.favorite == nil)
+        #expect(old.sources == nil)
     }
     @Test func propertyChangePreservesCompatibleValues() throws {
         let store = try LibraryStore(inMemory: true)

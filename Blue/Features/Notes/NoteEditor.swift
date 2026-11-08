@@ -9,7 +9,7 @@ struct NoteEditor: View {
     @State private var markdown = ""
     @State private var initialTitle = ""
     @State private var initialMarkdown = ""
-    @State private var folderID: UUID?
+    @State private var favorite = false
     @State private var original: Note?
     @State private var loaded = false
     @State private var preview = false
@@ -19,10 +19,9 @@ struct NoteEditor: View {
     var body: some View {
         Form {
             TextField(l("title"), text: $title).font(.title2.weight(.medium)).accessibilityIdentifier("noteTitle")
-            Picker(l("folder.title"), selection: $folderID) {
-                Text(l("folder.none")).tag(nil as UUID?)
-                ForEach(store.state.folders) { folder in Text(l.text(folder.title)).tag(Optional(folder.id)) }
-            }
+            IndicatorControl(field: .favoriteIndicator, selected: favorite, showsLabel: true) {
+                favorite.toggle()
+            }.accessibilityIdentifier("noteFavorite")
             Section {
                 if preview {
                     MarkdownView(text: $markdown)
@@ -40,7 +39,8 @@ struct NoteEditor: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(l("cancel")) {
-                    if title != initialTitle || markdown != initialMarkdown || folderID != original?.folderID {
+                    if title != initialTitle || markdown != initialMarkdown || favorite != (original?.favorite ?? false)
+                    {
                         confirmDiscard = true
                     } else {
                         dismiss()
@@ -52,7 +52,7 @@ struct NoteEditor: View {
                     preview.toggle()
                 } label: {
                     Image(systemName: preview ? "pencil" : "eye")
-                }.accessibilityLabel(l(preview ? "edit" : "preview"))
+                }.accessibilityLabel(l(preview ? "edit" : "preview")).accessibilityIdentifier("noteToggleEdit")
             }
             ToolbarItem(placement: .topBarTrailing) { SettingsButton() }
             ToolbarItem(placement: .topBarTrailing) {
@@ -74,9 +74,21 @@ struct NoteEditor: View {
             guard !loaded else { return }
             loaded = true
             original = store.state.notes.first { $0.id == noteID }
+            preview = noteID != nil
             title = original.map { l.text($0.title) } ?? ""
             markdown = original.map { l.text($0.markdown) } ?? ""
-            folderID = original?.folderID
+            favorite = original?.favorite ?? false
+            initialTitle = title
+            initialMarkdown = markdown
+        }
+        .onChange(of: store.state.notes.first { $0.id == noteID }?.revision) { _, _ in
+            guard let fresh = store.state.notes.first(where: { $0.id == noteID }),
+                title == initialTitle, markdown == initialMarkdown, favorite == (original?.favorite ?? false)
+            else { return }
+            original = fresh
+            title = l.text(fresh.title)
+            markdown = l.text(fresh.markdown)
+            favorite = fresh.favorite ?? false
             initialTitle = title
             initialMarkdown = markdown
         }
@@ -95,9 +107,10 @@ struct NoteEditor: View {
         do {
             try Validation.title(title)
             let note = Note(
-                id: noteID ?? UUID(), folderID: folderID,
+                id: noteID ?? UUID(),
                 title: title == initialTitle ? original?.title ?? .user(title) : .user(title),
                 markdown: markdown == initialMarkdown ? original?.markdown ?? .user(markdown) : .user(markdown),
+                favorite: favorite,
                 revision: original?.revision ?? 0)
             try store.saveNote(note, expectedRevision: original?.revision)
             dismiss()

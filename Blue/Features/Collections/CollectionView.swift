@@ -6,52 +6,38 @@ struct RecordRow: View {
     var directActions = true
     var showsFavoriteIndicator = true
     @Environment(Localizer.self) private var l
-    @Environment(LibraryStore.self) private var store
-    @State private var error: String?
+    @Environment(\.dynamicTypeSize) private var textSize
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(record.title).font(.body.weight(.medium)).foregroundStyle(.primary)
-                let secondary = collection.fields.filter {
-                    $0.showInRow && $0.kind != .rating && !$0.kind.isBoolean && record.values[$0.id] != nil
-                }
-                if !secondary.isEmpty {
-                    Text(secondary.prefix(2).map { l.value(record.values[$0.id], field: $0) }.joined(separator: " · "))
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                } else if !l.text(record.markdown).isEmpty {
-                    Text(l.text(record.markdown)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                }
-                ErrorLine(key: error)
+                Spacer(minLength: 8)
+
             }
-            Spacer(minLength: 0)
-            if let field = collection.fields.first(where: { $0.kind == .rating && $0.showInRow }),
-                let rating = record.values[field.id]?.number
-            {
-                Text(l.number(rating)).font(.system(.title3, design: .rounded).weight(.medium)).monospacedDigit()
-                    .accessibilityLabel(l.format("rating.value", l.number(rating)))
-            }
-            if let field = collection.fields.first(where: { $0.showInRow && [.favorite, .like].contains($0.kind) }) {
-                let selected = record.values[field.id]?.flag == true
-                if directActions {
-                    Button {
-                        do {
-                            try store.setValue(
-                                recordID: record.id, fieldID: field.id, value: .flag(!selected),
-                                revision: record.revision)
-                        } catch { self.error = (error as? BlueError ?? .saveFailed).key }
-                    } label: {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: textSize.isAccessibilitySize ? 300 : 130), alignment: .leading)],
+                alignment: .leading, spacing: 6
+            ) {
+                ForEach(collection.fields.filter { !$0.kind.isBoolean && record.values[$0.id] != nil }) { field in
+                    let value = record.values[field.id]
+                    Label {
+                        Text(l.text(field.label) + ": " + l.value(value, field: field))
+                    } icon: {
                         Image(
-                            systemName: field.kind == .like
-                                ? (selected ? "heart.fill" : "heart") : (selected ? "star.fill" : "star")
-                        ).frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.borderless).accessibilityLabel(l.text(field.label)).accessibilityValue(
-                        l(selected ? "yes" : "no"))
-                } else if selected && showsFavoriteIndicator {
-                    Image(systemName: field.kind == .like ? "heart.fill" : "star.fill").font(.subheadline)
+                            systemName: field.kind.isBoolean && value?.flag == true
+                                ? field.kind.symbol + ".fill" : field.kind.symbol)
+                    }.font(.caption).foregroundStyle(.secondary).lineLimit(textSize.isAccessibilitySize ? nil : 2)
+                        .frame(
+                            maxWidth: .infinity, alignment: .leading)
                 }
             }
-        }.padding(.vertical, 9).contentShape(Rectangle())
+            if showsFavoriteIndicator { RecordIndicators(record: record, collection: collection) }
+            if !l.text(record.markdown).isEmpty {
+                Label(l.text(record.markdown), systemImage: "text.alignleft")
+                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            .accessibilityElement(children: .combine)
     }
 }
 
@@ -92,9 +78,11 @@ struct CollectionView: View {
                             QuietButton(key: "close", symbol: "xmark") { navigation.noticeKey = nil }
                         }
                     }
-                    if !query.filters.isEmpty { activeFilters(collection).listRowSeparator(.hidden) }
+                    if query.filters.contains(where: { $0.flag == nil }) {
+                        activeFilters(collection).listRowSeparator(.hidden)
+                    }
                     ForEach(records) { record in
-                        HStack {
+                        VStack(alignment: .leading, spacing: 0) {
                             Button {
                                 navigation.path.append(.record(record.id))
                             } label: {
@@ -102,14 +90,12 @@ struct CollectionView: View {
                                     record: record, collection: collection, directActions: false,
                                     showsFavoriteIndicator: false)
                             }
-                            .buttonStyle(.plain)
-                            if let field = collection.fields.first(where: {
-                                $0.showInRow && [.like, .favorite].contains($0.kind)
-                            }) {
-                                favoriteButton(record, field)
-                            }
+                            .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("row-\(record.title)")
+                            RecordIndicators(record: record, collection: collection, interactive: true).padding(
+                                .bottom, 9)
+
                         }
-                        .id(record.id).accessibilityIdentifier("row-\(record.title)")
+                        .id(record.id)
                         .listRowBackground(
                             navigation.highlightedRecord == record.id ? Color.primary.opacity(0.07) : Color.clear)
                     }
@@ -122,6 +108,9 @@ struct CollectionView: View {
                     }
                 }
                 .listStyle(.plain)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    controls(collection).padding(.horizontal, 16).padding(.vertical, 8).background(.background)
+                }
                 .task(id: snapshot) {
                     guard snapshot.records.count > 500 else { return }
                     let worker = Task.detached(priority: .userInitiated) {
@@ -140,34 +129,11 @@ struct CollectionView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button(l("filters.title"), systemImage: "line.3.horizontal.decrease") { showFilters = true }
-                            Button(l("settings.title"), systemImage: "slider.horizontal.3") { showSettings = true }
-                                .accessibilityIdentifier("settingsButton")
-                            Section(l("sort.titleLabel")) {
-                                sortButton("title", label: l("title"))
-                                ForEach(collection.fields) { field in sortButton(field.id, label: l.text(field.label)) }
-                                Button(l(query.ascending ? "sort.descending" : "sort.ascending")) {
-                                    var next = query
-                                    next.ascending.toggle()
-                                    navigation.queries[collectionID] = next
-                                }
-                            }
-                            NavigationLink(l("collection.properties"), value: Route.collectionSettings(collectionID))
-                        } label: {
-                            Image(
-                                systemName: query.filters.isEmpty
-                                    ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
-                            ).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-                        }
-                        .accessibilityLabel(l("collection.options")).accessibilityIdentifier("collectionOptions")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink(value: Route.newRecord(collectionID)) {
                             Image(systemName: "plus").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                         }
                         .accessibilityLabel(l("record.new")).accessibilityIdentifier("newRecord")
-                    }
+                    }.sharedBackgroundVisibility(.hidden)
                 }
                 .sheet(isPresented: $showSettings) { NavigationStack { SettingsView() } }
                 .sheet(isPresented: $showFilters) {
@@ -189,6 +155,52 @@ struct CollectionView: View {
             ContentUnavailableView(l("error.missing"), systemImage: "list.bullet")
         }
     }
+    private func controls(_ collection: Collection) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 8)], alignment: .leading,
+            spacing: 8
+        ) {
+            ForEach(
+                [FieldDefinition.favoriteIndicator]
+                    + collection.fields.filter { $0.kind.isBoolean && $0.kind != .favorite }
+            ) { field in
+                IndicatorControl(
+                    field: field,
+                    selected: query.filters.contains { $0.fieldID == field.id && $0.flag == true }
+                ) {
+                    var updated = query
+                    if updated.filters.contains(where: { $0.fieldID == field.id }) {
+                        updated.filters.removeAll { $0.fieldID == field.id }
+                    } else {
+                        updated.filters.append(RecordFilter(fieldID: field.id, flag: true))
+                    }
+                    navigation.queries[collectionID] = updated
+                }.accessibilityIdentifier("quickFilter-\(field.id)")
+            }
+            Menu {
+                Button(l("filters.title"), systemImage: "line.3.horizontal.decrease") { showFilters = true }
+                Button(l("settings.title"), systemImage: "slider.horizontal.3") { showSettings = true }
+                    .accessibilityIdentifier("settingsButton")
+                Section(l("sort.titleLabel")) {
+                    sortButton("title", label: l("title"))
+                    ForEach(collection.fields) { field in sortButton(field.id, label: l.text(field.label)) }
+                    Button(l(query.ascending ? "sort.descending" : "sort.ascending")) {
+                        var next = query
+                        next.ascending.toggle()
+                        navigation.queries[collectionID] = next
+                    }
+                }
+                NavigationLink(l("collection.properties"), value: Route.collectionSettings(collectionID))
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 20, weight: .medium))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(l("collection.options")).accessibilityIdentifier("collectionOptions")
+            QuietButton(key: "filters.title", symbol: "line.3.horizontal.decrease") { showFilters = true }
+                .accessibilityIdentifier("openFilters")
+        }
+    }
     private func sortButton(_ id: String, label: String) -> some View {
         Button {
             var next = query
@@ -201,25 +213,10 @@ struct CollectionView: View {
             }
         }
     }
-    private func favoriteButton(_ record: Record, _ field: FieldDefinition) -> some View {
-        let selected = record.values[field.id]?.flag == true
-        return Button {
-            do {
-                try store.setValue(
-                    recordID: record.id, fieldID: field.id, value: .flag(!selected), revision: record.revision)
-            } catch { navigation.noticeKey = (error as? BlueError ?? .saveFailed).key }
-        } label: {
-            Image(
-                systemName: field.kind == .like
-                    ? (selected ? "heart.fill" : "heart") : (selected ? "star.fill" : "star")
-            ).frame(width: 44, height: 44)
-        }.buttonStyle(.borderless).accessibilityLabel(l.text(field.label)).accessibilityValue(
-            l(selected ? "yes" : "no"))
-    }
     @ViewBuilder private func activeFilters(_ collection: Collection) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                ForEach(query.filters.prefix(2)) { filter in filterChip(filter, collection) }
+                ForEach(query.filters.filter { $0.flag == nil }.prefix(2)) { filter in filterChip(filter, collection) }
                 overflowFilters(collection, skip: 2)
                 Spacer(minLength: 0)
             }
@@ -268,7 +265,7 @@ struct CollectionView: View {
     @ViewBuilder private func overflowFilters(_ collection: Collection, skip: Int) -> some View {
         if query.filters.count > skip {
             Menu {
-                ForEach(Array(query.filters.dropFirst(skip))) { filter in
+                ForEach(Array(query.filters.filter { $0.flag == nil }.dropFirst(skip))) { filter in
                     let name =
                         collection.fields.first { $0.id == filter.fieldID }.map { l.text($0.label) } ?? filter.fieldID
                     Button(
@@ -294,7 +291,28 @@ struct FilterEditor: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         Form {
-            ForEach(collection.fields) { field in
+            Section {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 44, maximum: 44), spacing: 8)], alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(
+                        [FieldDefinition.favoriteIndicator]
+                            + collection.fields.filter { $0.kind.isBoolean && $0.kind != .favorite }
+                    ) { field in
+                        IndicatorControl(
+                            field: field, selected: query.filters.contains { $0.fieldID == field.id && $0.flag == true }
+                        ) {
+                            if query.filters.contains(where: { $0.fieldID == field.id }) {
+                                remove(field.id)
+                            } else {
+                                set(RecordFilter(fieldID: field.id, flag: true))
+                            }
+                        }
+                    }
+                }
+            }
+            ForEach(collection.fields.filter { !$0.kind.isBoolean }) { field in
                 Section(l.text(field.label)) {
                     let active = query.filters.first { $0.fieldID == field.id }
                     switch field.kind {
@@ -316,13 +334,16 @@ struct FilterEditor: View {
                             .accessibilityIdentifier("filterOption-\(option.id)")
                         }
                     case .checkbox, .like, .favorite:
-                        Toggle(
-                            l("filters.onlySelected"),
-                            isOn: Binding(
-                                get: { active?.flag == true },
-                                set: {
-                                    if $0 { set(RecordFilter(fieldID: field.id, flag: true)) } else { remove(field.id) }
-                                }))
+                        QuickChoice(
+                            title: l.text(field.label), symbol: field.kind.symbol,
+                            selected: active?.flag == true
+                        ) {
+                            if active?.flag == true {
+                                remove(field.id)
+                            } else {
+                                set(RecordFilter(fieldID: field.id, flag: true))
+                            }
+                        }
                     case .rating, .number:
                         Toggle(
                             l("filters.useRange"),

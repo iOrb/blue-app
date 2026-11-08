@@ -5,24 +5,12 @@ struct CollectionCreator: View {
     @Environment(Localizer.self) private var l
     @Environment(NavigationState.self) private var navigation
     @State private var title = ""
-    @State private var template = "simple"
     @State private var error: String?
     var body: some View {
         Form {
             TextField(l("title"), text: $title).accessibilityIdentifier("collectionTitle")
-            Section(l("collection.startWith")) {
-                ForEach(["simple", "movies", "tv", "games", "artists", "food", "restaurants"], id: \.self) { item in
-                    Button {
-                        template = item
-                    } label: {
-                        HStack {
-                            Text(l("template.\(item)"))
-                            Spacer()
-                            if template == item { Image(systemName: "checkmark") }
-                        }
-                    }.accessibilityIdentifier("template-\(item)")
-                }
-            }
+            Label(l("collection.growsWithYou"), systemImage: "sparkle")
+                .font(.subheadline).foregroundStyle(.secondary)
             ErrorLine(key: error)
         }
         .modifier(KeyboardDismissToolbar()).navigationTitle(l("collection.new")).navigationBarTitleDisplayMode(.inline)
@@ -30,7 +18,7 @@ struct CollectionCreator: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(l("create")) {
                     do {
-                        let id = try store.createCollection(title: title, fields: StarterLibrary.fields(for: template))
+                        let id = try store.createCollection(title: title, fields: [])
                         navigation.path.removeLast()
                         navigation.path.append(.collection(id))
                     } catch { self.error = (error as? BlueError ?? .saveFailed).key }
@@ -58,11 +46,7 @@ struct CollectionSettings: View {
         Form {
             TextField(l("title"), text: $title)
             if let draft {
-                Picker(
-                    l("folder.title"), selection: Binding(get: { draft.folderID }, set: { self.draft?.folderID = $0 })
-                ) {
-                    ForEach(store.state.folders) { folder in Text(l.text(folder.title)).tag(folder.id) }
-                }
+                TextField(l("field.icon"), text: Binding(get: { draft.symbol }, set: { self.draft?.symbol = $0 }))
                 Section(l("collection.properties")) {
                     ForEach(draft.fields) { field in
                         Button {
@@ -170,6 +154,27 @@ struct FieldEditor: View {
             TextField(l("field.spanishLabel"), text: $es)
             Picker(l("field.type"), selection: $field.kind) {
                 ForEach(FieldKind.allCases, id: \.self) { kind in Text(l(kind.labelKey)).tag(kind) }
+            }
+            TextField(
+                l("field.icon"), text: Binding(get: { field.icon ?? "" }, set: { field.icon = $0.isEmpty ? nil : $0 })
+            )
+            .accessibilityIdentifier("propertyIcon")
+            if field.kind.isBoolean {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 44))], alignment: .leading) {
+                    ForEach(IndicatorTint.allCases, id: \.self) { tint in
+                        Button {
+                            field.tint = tint
+                        } label: {
+                            Circle().fill(tint.color).frame(width: 24, height: 24)
+                                .overlay {
+                                    if field.tint == tint {
+                                        Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white)
+                                    }
+                                }
+                                .frame(width: 44, height: 44)
+                        }.buttonStyle(.plain).accessibilityLabel(l("color.\(tint.rawValue)"))
+                    }
+                }
             }
             Toggle(l("field.showInRow"), isOn: $field.showInRow)
             if field.kind == .status {

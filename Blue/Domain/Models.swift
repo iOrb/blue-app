@@ -19,11 +19,28 @@ enum FieldKind: String, Codable, CaseIterable, Sendable {
     case text, number, rating, date, status, checkbox, like, favorite, tags
     var labelKey: String { "field.\(rawValue)" }
     var isBoolean: Bool { [.checkbox, .like, .favorite].contains(self) }
+    var symbol: String {
+        switch self {
+        case .text: "text.alignleft"
+        case .number: "number"
+        case .rating: "number.circle"
+        case .date: "calendar"
+        case .status: "circle.lefthalf.filled"
+        case .checkbox: "checkmark.circle"
+        case .like: "heart"
+        case .favorite: "star"
+        case .tags: "tag"
+        }
+    }
 }
 
 struct FieldOption: Codable, Hashable, Identifiable, Sendable {
     var id: String
     var label: LocalText
+}
+
+enum IndicatorTint: String, Codable, CaseIterable, Sendable {
+    case blue, purple, orange, green, red, pink, yellow
 }
 
 struct FieldDefinition: Codable, Hashable, Identifiable, Sendable {
@@ -32,6 +49,8 @@ struct FieldDefinition: Codable, Hashable, Identifiable, Sendable {
     var kind: FieldKind
     var options: [FieldOption] = []
     var showInRow = false
+    var icon: String?
+    var tint: IndicatorTint?
 }
 
 enum FieldValue: Codable, Hashable, Sendable {
@@ -60,11 +79,17 @@ struct Folder: Codable, Hashable, Identifiable, Sendable {
 
 struct Collection: Codable, Hashable, Identifiable, Sendable {
     var id = UUID()
-    var folderID: UUID
+    var folderID: UUID?
     var title: LocalText
     var symbol: String = "list.bullet"
     var fields: [FieldDefinition]
     var createdAt = Date()
+}
+
+struct WebSource: Codable, Hashable, Sendable {
+    var title: String
+    var summary: String
+    var url: URL
 }
 
 struct Record: Codable, Hashable, Identifiable, Sendable {
@@ -73,6 +98,9 @@ struct Record: Codable, Hashable, Identifiable, Sendable {
     var title: String
     var markdown: LocalText = .user("")
     var values: [String: FieldValue] = [:]
+    var favorite: Bool?
+    var sources: [WebSource]?
+    var isFavorite: Bool { favorite ?? values["favorite"]?.flag ?? false }
     var revision = 0
     var updatedAt = Date()
 }
@@ -82,6 +110,7 @@ struct Note: Codable, Hashable, Identifiable, Sendable {
     var folderID: UUID?
     var title: LocalText
     var markdown: LocalText
+    var favorite: Bool?
     var revision = 0
     var updatedAt = Date()
 }
@@ -98,7 +127,7 @@ struct SavedAlarm: Codable, Hashable, Identifiable, Sendable {
 }
 
 struct LibraryState: Codable, Equatable, Sendable {
-    var formatVersion = 1
+    var formatVersion = 2
     var folders: [Folder] = []
     var collections: [Collection] = []
     var records: [Record] = []
@@ -108,7 +137,7 @@ struct LibraryState: Codable, Equatable, Sendable {
 
 enum BlueError: Error, Equatable {
     case missing, ambiguous, invalidValue, staleRevision, folderDepth, permissionDenied
-    case alarmFailed, saveFailed, modelUnavailable, cancelled, unsupported, emptyTitle
+    case alarmFailed, saveFailed, modelUnavailable, cancelled, unsupported, emptyTitle, webUnavailable
     var key: String { "error.\(String(describing: self))" }
 }
 
@@ -123,7 +152,7 @@ struct RecordFilter: Codable, Hashable, Identifiable, Sendable {
     var before: Date?
 }
 
-struct CollectionQuery: Equatable, Sendable {
+struct CollectionQuery: Codable, Equatable, Sendable {
     var search = ""
     var sortField = "title"
     var ascending = true
@@ -137,7 +166,10 @@ struct CollectionQuery: Equatable, Sendable {
                     != nil
             return matchesSearch
                 && filters.allSatisfy { filter in
-                    guard let value = record.values[filter.fieldID] else { return false }
+                    guard
+                        let value = filter.fieldID == "__favorite"
+                            ? FieldValue.flag(record.isFavorite) : record.values[filter.fieldID]
+                    else { return false }
                     if let min = filter.minimum, (value.number ?? -.infinity) < min { return false }
                     if let max = filter.maximum, (value.number ?? .infinity) > max { return false }
                     if let flag = filter.flag, value.flag != flag { return false }
@@ -202,11 +234,18 @@ enum Validation {
         guard valid else { throw BlueError.invalidValue }
     }
 
+    static func icon(_ value: String) throws {
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, value.count <= 60,
+            !value.contains("\n")
+        else { throw BlueError.invalidValue }
+    }
     static func collection(_ collection: Collection) throws {
+        try icon(collection.symbol)
         guard collection.fields.count <= 12, Set(collection.fields.map(\.id)).count == collection.fields.count else {
             throw BlueError.invalidValue
         }
         for field in collection.fields {
+            if let icon = field.icon { try self.icon(icon) }
             guard !field.id.isEmpty, field.id.count <= 80 else { throw BlueError.invalidValue }
             if field.label.key == nil {
                 guard !field.label.english.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -265,8 +304,64 @@ enum MutationIntent {
             "schedule", "enable", "disable", "mark", "rate", "save", "cambia", "cambiar", "pon", "ponle", "poner",
             "actualiza", "actualizar", "anade", "anadir", "agrega", "crea", "crear", "haz", "hacer", "elimina",
             "eliminar", "borra", "borrar", "quita", "renombra", "mueve", "programa", "activa", "desactiva", "marca",
-            "puntua", "guarda",
+            "puntua", "guarda", "modifica", "modify", "personaliza", "apunta", "anota", "rellena", "completa",
+            "enriquece", "fill", "enrich", "complete",
+            "capture",
         ]
         return !actions.isDisjoint(with: words)
+    }
+}
+
+/// Prevent numeric drift (especially Spanish decimal commas) and unsupported personal values.
+enum UserValueEvidence {
+    static func contains(number: Double, in prompt: String) -> Bool {
+        let expression = try! NSRegularExpression(pattern: "[+-]?[0-9]+(?:[.,][0-9]+)?")
+        let range = NSRange(prompt.startIndex..., in: prompt)
+        for match in expression.matches(in: prompt, range: range) {
+            if let range = Range(match.range, in: prompt),
+                Double(prompt[range].replacingOccurrences(of: ",", with: ".")) == number
+            {
+                return true
+            }
+        }
+        for locale in ["en_US", "es_ES"] {
+            let formatter = NumberFormatter()
+            formatter.locale = Locale(identifier: locale)
+            formatter.numberStyle = .spellOut
+            if prompt.components(separatedBy: .whitespacesAndNewlines).contains(where: {
+                formatter.number(from: $0)?.doubleValue == number
+            }) {
+                return true
+            }
+        }
+        return false
+    }
+}
+
+enum PublicLookupIntent {
+    static func allowed(prompt: String, collectionName: String) -> Bool {
+        let text = (prompt + " " + collectionName).folding(
+            options: [.caseInsensitive, .diacriticInsensitive], locale: .init(identifier: "en_US"))
+        let words = Set(text.components(separatedBy: CharacterSet.alphanumerics.inverted))
+        return !Set([
+            "web", "wikipedia", "internet", "online", "movie", "movies", "film", "films", "pelicula", "peliculas",
+            "peli", "pelis", "series", "tv", "game", "games", "juego", "juegos", "artist", "artists", "artista",
+            "artistas", "album", "book", "books", "libro", "libros", "restaurant", "restaurants", "restaurante",
+            "restaurantes",
+        ]).isDisjoint(with: words)
+    }
+}
+
+enum MarkdownRequest {
+    static func preservingFormat(_ markdown: String, prompt: String, existing: String = "") -> String {
+        let wantsChecklist =
+            ["checklist", "check list", "casillas", "lista de tareas"].contains {
+                prompt.localizedCaseInsensitiveContains($0)
+            } || existing.contains("- [")
+        guard wantsChecklist else { return markdown }
+        return markdown.components(separatedBy: "\n").map { line in
+            if line.hasPrefix("- ") && !line.hasPrefix("- [") { return "- [ ] " + line.dropFirst(2) }
+            return line
+        }.joined(separator: "\n")
     }
 }

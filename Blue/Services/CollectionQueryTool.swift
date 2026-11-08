@@ -4,7 +4,7 @@ import FoundationModels
 struct CollectionQueryTool: Tool {
     let name = "viewCollection"
     let description =
-        "Open a collection with typed filters and a sort order. Use empty filters to show all. Status values use semantic option IDs; describe the collection first with no filters if its fields are unknown."
+        "Open a collection with typed filters and a sort order. Use empty filters to show all. The universal favorite filter uses fieldID __favorite and selected true. Status values use semantic option IDs; describe the collection first with no filters if its fields are unknown."
     let context: ToolContext
     @Generable struct Filter {
         var fieldID: String
@@ -34,8 +34,14 @@ struct CollectionQueryTool: Tool {
         }
         guard arguments.sortFieldID == "title" || collection.fields.contains(where: { $0.id == arguments.sortFieldID })
         else { throw BlueError.invalidValue }
-        guard arguments.filters.count <= collection.fields.count else { throw BlueError.invalidValue }
+        guard arguments.filters.count <= collection.fields.count + 1 else { throw BlueError.invalidValue }
         let filters = try arguments.filters.map { input -> RecordFilter in
+            if input.fieldID == "__favorite" {
+                guard let selected = input.selected, input.minimum == nil, input.maximum == nil,
+                    input.text == nil || input.text == ""
+                else { throw BlueError.invalidValue }
+                return RecordFilter(fieldID: "__favorite", flag: selected)
+            }
             guard let field = collection.fields.first(where: { $0.id == input.fieldID }) else {
                 throw BlueError.invalidValue
             }
@@ -83,14 +89,19 @@ struct CreateNoteTool: Tool {
     let context: ToolContext
     @Generable struct Arguments {
         var title: String
-        var markdown: String
+        @Guide(
+            description:
+                "Markdown source. Preserve requested formatting: headings start with # and checklist items with - [ ]. Use actual newlines."
+        ) var markdown: String
     }
     func call(arguments: Arguments) async throws -> String { try await perform(arguments) }
     @MainActor private func perform(_ arguments: Arguments) throws -> String {
         try context.check(mutation: true)
         try Validation.title(arguments.title)
         guard arguments.markdown.count <= 20_000 else { throw BlueError.invalidValue }
-        let note = Note(title: .user(arguments.title), markdown: .user(arguments.markdown))
+        let note = Note(
+            title: .user(arguments.title),
+            markdown: .user(MarkdownRequest.preservingFormat(arguments.markdown, prompt: context.sourcePrompt)))
         try context.store.saveNote(note, expectedRevision: nil)
         context.didMutate = true
         context.result = .notes([note.id])

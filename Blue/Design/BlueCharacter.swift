@@ -86,9 +86,10 @@ struct QuietButton: View {
     @Environment(Localizer.self) private var l
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+            Image(systemName: symbol).font(.system(size: 20, weight: .medium))
+                .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }
-        .accessibilityLabel(l(key))
+        .buttonStyle(.plain).accessibilityLabel(l(key))
     }
 }
 

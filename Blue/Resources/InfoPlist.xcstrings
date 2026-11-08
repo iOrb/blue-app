@@ -17,6 +17,40 @@
           }
         }
       }
+    },
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue uses the microphone only when you tap it to dictate a request."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue utiliza el micrófono solo cuando lo pulsas para dictar una petición."
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue transcribes your voice on this device so you can edit and send it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue transcribe tu voz en este dispositivo para que puedas editarla y enviarla."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

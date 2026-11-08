@@ -41,7 +41,7 @@ for prefix, values in {
     "field.": ["text", "number", "rating", "date", "status", "checkbox", "like", "favorite", "tags"],
     "character.": ["idle", "listening", "thinking", "searching", "working", "success", "error"],
     "status.": ["wantWatch", "watched", "watching", "finished", "wantPlay", "playing", "wantExplore", "exploring", "wantTry", "tried", "wantVisit", "visited"],
-    "error.": ["missing", "ambiguous", "invalidValue", "staleRevision", "folderDepth", "permissionDenied", "alarmFailed", "saveFailed", "modelUnavailable", "cancelled", "unsupported", "emptyTitle"],
+    "error.": ["missing", "ambiguous", "invalidValue", "staleRevision", "folderDepth", "permissionDenied", "alarmFailed", "saveFailed", "modelUnavailable", "cancelled", "unsupported", "emptyTitle", "webUnavailable"],
 }.items():
     for value in values:
         if prefix + value not in known:

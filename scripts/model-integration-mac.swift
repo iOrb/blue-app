@@ -2,7 +2,7 @@ import Foundation
 import FoundationModels
 
 // AlarmKit is iOS-only. This adapter rejects alarm actions in the Mac verification harness.
-// The record store, model orchestration and all seven tool schemas are production sources.
+// The record store, model orchestration and tool schemas are production sources.
 @MainActor final class AlarmService {
     func alarms(on date: Date) -> [SavedAlarm] { [] }
     func save(_ alarm: SavedAlarm) async throws { throw BlueError.unsupported }
@@ -66,7 +66,7 @@ import FoundationModels
                 throw BlueError.invalidValue
             }
             print("PRODUCTION_MAC_SPANISH_READ_EDIT_REOPEN_VERIFIED rating=8.5")
-            assistant.input = "Make a list of hiking routes with distance, difficulty, and notes."
+            assistant.input = "Make a list of hiking routes with numeric distance and difficulty choices Easy, Moderate, and Hard."
             assistant.submit(store: store, alarms: alarms, language: .english)
             try await waitForResult(assistant)
             guard case .collection(let collectionID) = assistant.result,

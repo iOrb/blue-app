@@ -1571,13 +1571,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your notes and requests stay on your device. Blue has no account, cloud model, or analytics."
+            "value": "Your library and AI stay local. For public web lookups, Blue sends only the topic title to Wikipedia. Dictation stays on the device."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tus notas y peticiones se quedan en tu dispositivo. Blue no utiliza cuentas, modelos en la nube ni analíticas."
+            "value": "Tu biblioteca y la IA son locales. Al consultar información pública, Blue solo envía el título a Wikipedia. El dictado se procesa en el dispositivo."
           }
         }
       }
@@ -1622,13 +1622,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask Blue…"
+            "value": "Tell Blue…"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pídele a Blue…"
+            "value": "Cuéntale a Blue…"
           }
         }
       }
@@ -2938,6 +2938,465 @@
           "stringUnit": {
             "state": "translated",
             "value": "¿Eliminar esta carpeta y todo su contenido? Puedes deshacerlo en Ajustes."
+          }
+        }
+      }
+    },
+    "library.scope.all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo"
+          }
+        }
+      }
+    },
+    "library.scope.notes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notas"
+          }
+        }
+      }
+    },
+    "library.scope.collections": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collections"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colecciones"
+          }
+        }
+      }
+    },
+    "library.scope.favorites": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorites"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoritos"
+          }
+        }
+      }
+    },
+    "library.startTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A place for whatever matters."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un lugar para lo que te importa."
+          }
+        }
+      }
+    },
+    "library.startHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell Blue what you want to keep. A film, a place, an idea — the collection takes shape with you."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dile a Blue qué quieres guardar. Una película, un lugar, una idea… La colección toma forma contigo."
+          }
+        }
+      }
+    },
+    "library.askBlue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell Blue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuéntaselo a Blue"
+          }
+        }
+      }
+    },
+    "collection.growsWithYou": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start with a name. Ask Blue to add useful details whenever you need them."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empieza con un nombre. Pide a Blue los detalles que necesites cuando quieras."
+          }
+        }
+      }
+    },
+    "assistant.showConversation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show or hide Blue’s reply"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar u ocultar la respuesta de Blue"
+          }
+        }
+      }
+    },
+    "assistant.macBridge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence on this Mac · Simulator"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence en este Mac · Simulador"
+          }
+        }
+      }
+    },
+    "dictation.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate to Blue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hablar con Blue"
+          }
+        }
+      }
+    },
+    "dictation.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop dictation"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminar dictado"
+          }
+        }
+      }
+    },
+    "dictation.listening": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Te escucho…"
+          }
+        }
+      }
+    },
+    "dictation.permission": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Microphone and Speech Recognition in Settings to dictate."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permite el micrófono y el reconocimiento de voz en Ajustes para dictar."
+          }
+        }
+      }
+    },
+    "dictation.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device dictation is unavailable here. You can keep typing."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El dictado local no está disponible aquí. Puedes seguir escribiendo."
+          }
+        }
+      }
+    },
+    "web.sources": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From the web"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De la web"
+          }
+        }
+      }
+    },
+    "web.attribution": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wikipedia · CC BY-SA. Public sources may refer to different works; open a link to check. Your personal notes stay separate."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wikipedia · CC BY-SA. Las fuentes pueden referirse a obras distintas; abre el enlace para comprobarlo. Tus notas personales se guardan aparte."
+          }
+        }
+      }
+    },
+    "error.webUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I couldn’t retrieve reliable public information. Your saved details haven’t changed."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No he podido obtener información pública fiable. Tus datos guardados siguen igual."
+          }
+        }
+      }
+    },
+    "field.icon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji or symbol"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji o símbolo"
+          }
+        }
+      }
+    },
+    "assistant.contextTooLong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That request became too large. Try one change at a time."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La petición se ha hecho demasiado grande. Prueba con un cambio cada vez."
+          }
+        }
+      }
+    },
+    "color.blue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azul"
+          }
+        }
+      }
+    },
+    "color.purple": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purple"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Morado"
+          }
+        }
+      }
+    },
+    "color.orange": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Naranja"
+          }
+        }
+      }
+    },
+    "color.green": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verde"
+          }
+        }
+      }
+    },
+    "color.red": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rojo"
+          }
+        }
+      }
+    },
+    "color.pink": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pink"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rosa"
+          }
+        }
+      }
+    },
+    "color.yellow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amarillo"
           }
         }
       }

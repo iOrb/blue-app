@@ -8,8 +8,6 @@ enum Route: Hashable {
     case newRecord(UUID)
     case newNote, newCollection
     case collectionSettings(UUID)
-    case folder(UUID)
-    case newFolder
 }
 
 @MainActor
@@ -22,6 +20,8 @@ final class NavigationState {
     var highlightedAlarm: UUID?
     var queries: [UUID: CollectionQuery] = [:]
     var noticeKey: String?
+    var assistantFocused = false
+    var assistantExpanded = false
     func jump(to record: Record, store: LibraryStore, locale: Locale) {
         tab = 0
         var query = queries[record.collectionID] ?? CollectionQuery()

@@ -1,5 +1,7 @@
-Blue 1.0 — un espacio tranquilo para tus notas, colecciones y alarmas.
+Blue 1.0 — notas, colecciones adaptables y alarmas.
 
-Prueba a editar un elemento, filtrar una colección y cambiar entre inglés y español. En un iPhone compatible con Apple Intelligence, pregunta por la puntuación de Interstellar, ve al elemento exacto y cambia su puntuación. Reinicia la app para comprobar que los cambios se guardan. Crea una alarma y comprueba que suena con el iPhone bloqueado.
+Solo notas y colecciones, conservando el contenido de las antiguas carpetas. Las notas se abren con Markdown renderizado y siguen siendo editables. Los indicadores personalizados funcionan igual en listas, detalles y filtros: gris claro al desactivarlos y con color al activarlos. Los favoritos usan una estrella.
 
-Las notas y peticiones se quedan en tu dispositivo. Instálala directamente desde Xcode con tu Personal Team.
+Pide a Blue que guarde elementos, añada o quite campos, cambie iconos, edite notas y complete información pública básica con enlaces a Wikipedia. Intro envía; tocar fuera cierra el chat; el micrófono ofrece dictado local cuando está disponible. La edición manual funciona aunque el modelo no esté disponible.
+
+Instálala desde Xcode con tu Personal Team gratuito. El simulador puede usar el modelo local del Mac mediante el puente de desarrollo configurado explícitamente. La IA del iPhone, el micrófono, la firma y las alarmas requieren comprobación en un dispositivo físico. No necesitas TestFlight.

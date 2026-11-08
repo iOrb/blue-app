@@ -23,60 +23,72 @@ The delivery is a public `iOrb/blue-app` repository, a running iPhone simulator 
 - `scripts/test-model-mac.sh`
 - `scripts/build-device.sh` — unsigned `iphoneos` SDK compilation passes; this does not establish Personal Team signing or installation.
 
-The last local unit/compact pass contains all 26 unit tests and the final maximum-text-size flow. All seven normal UI flows passed across the full run and targeted corrections. Screenshots from the running simulator are in [screenshots](screenshots), including [compact collection](screenshots/compact-collection-en.png) and [accessible calendar](screenshots/compact-calendar-es.png).
+The current delivery has 30 Swift Testing tests and ten regular XCTest UI flows. The final accessibility/chat/favorite-toggle checks passed in `artifacts/Tests-20261108-133412.xcresult`, followed by successful Release and unsigned iPhone SDK builds. The full run in `artifacts/Tests-20261108-130618.xcresult` passed all 40; the final 30-test data pass and rendered-note/maximum-text-size flows also passed in `artifacts/Tests-20261108-132104.xcresult`. Test artifacts are local and ignored by Git. Curated simulator screenshots are in [screenshots](screenshots), including [custom indicators](screenshots/custom-indicators.png). The compact flow was rerun after changing accessibility-sized property grids to one column and limiting action glyph sizes (`artifacts/Tests-20261108-132445.xcresult`); it confirmed Accessibility XXXL, dark appearance and Reduce Motion.
 
 ## Functional evidence
 
-`scripts/check.sh` passes: strict swift-format lint, shell/Python syntax, and 174 catalog keys with English/Spanish translations and matching placeholders. Explicitly identical translations are allowlisted. There are no Swift compiler warnings in the final source; Xcode may emit a test-bundle App Intents metadata-extraction notice because that bundle exposes no intents.
+`scripts/check.sh` validates strict Swift formatting, shell/Python syntax, and 203 English/Spanish catalog keys with matching placeholders. Swift compiler diagnostics are checked separately from Xcode's test-bundle App Intents metadata notice.
 
-26 Swift Testing tests pass, covering typed values, numeric sorting with missing values, combined filters, folder depth, schema validation, starter semantics, durable edits and deletion, no reseeding of empty data, stale-edit rejection, undo, JSON export, exact navigation with conflicting filters, ambiguous tool reads, mutation/cancellation rules, read-only request authorization, collection query validation, model error mapping, request replacement, property migration, alarm permission denial and scheduling failure, system cancellation reconciliation, recurrence and time-zone changes.
+The data tests cover typed values and queries, backward decoding, folder-to-collection migration without losing notes, durable edits and deletion, no reseeding, stale revisions, undo, JSON export, exact navigation through conflicting filters, ambiguity, mutation/cancellation authorization, numeric evidence including Spanish decimal commas, adaptive fields, custom icons, destructive schema review, and alarm scheduling/reconciliation failure paths. Existing field types remain authoritative when the model redundantly describes them during a value edit.
 
-XCTest exercises assistant read → exact row → Spanish switch → edit → save → relaunch; unsaved Markdown with a language switch; multiple filters and individual removal; simple and custom collections; calendar and a disabled alarm; accessibility audits; and keyboard/layout behavior at the configured text size. Deterministic assistant flows are explicitly test doubles, not real-model evidence.
+The ten regular UI flows cover:
 
-All seven XCTest flows were exercised at normal text size. The compact pass uses the maximum Accessibility XXXL size, dark appearance and Reduce Motion enabled; the test runner confirmed `UICTContentSizeCategoryAccessibilityXXXL` and `reduceMotion=true`. At accessibility sizes, numeric field editors stack their label/value, the calendar uses a native date picker, and filters open at full height. This avoids crowding a month grid or narrow property row.
+- Assistant read → exact row → Spanish switch → edit → relaunch persistence.
+- Unsaved Markdown and navigation across language changes.
+- Combined collection filters and individual removal.
+- Empty and custom collections, with no folder UI or creation templates.
+- Calendar and a disabled alarm.
+- Accessibility descriptions and 44-point hit regions.
+- Configured Dynamic Type, keyboard and calendar layout.
+- Enter-to-send, outside dismissal, retained chat draft, favorites and the microphone action.
+- Custom 🗿/🚬 indicators in rows, details and icon filters.
+- Saved notes opening in rendered Markdown and switching to manual editing.
 
-The automated accessibility audit checks sufficient descriptions and hit regions in the library, collection and calendar. It initially caught small calendar targets; explicit content shapes and minimum 44-point targets corrected them. Manual VoiceOver listening on a physical device remains a separate check.
+These regular assistant flows explicitly use a deterministic test double. They do not prove model quality or speech recognition. The microphone action exists and the service requires on-device recognition, but physical audio capture still needs hardware verification.
 
-## Real model
+## Genuine model checks
 
-The Mac's genuine Foundation Models service reported available. `scripts/test-model-mac.sh` compiles the production domain, SwiftData store, localization, assistant orchestration and tools against the Mac SDK. Only AlarmKit is replaced with an adapter that rejects alarm actions. The harness creates a fresh temporary database and verifies actual model read → follow-up edit → reopen, using the same code as the iPhone app. This is not the deterministic assistant.
+The Mac's Foundation Models service reports available. The Mac integration and simulator bridge compile the production store, routing and tools; the Mac-only alarm adapter rejects alarm actions. No scripted assistant is used in these checks. Catalog resources are generated alongside the standalone Mac executable so built-in labels resolve in both languages. The final `scripts/test-model-mac.sh` run passed English read/edit/reopen, Spanish read/decimal-comma edit/reopen, and a requested numeric-distance/choice-difficulty collection. The first useful read took 1.808 seconds; read plus persisted follow-up edit took 7.755 seconds. A model response error after a successful read did not discard the validated tool result. Explicit kind guidance corrected an earlier choice-field/checkbox mismatch.
 
-The initial real-model run chose an unrelated tool when all seven tools were exposed together. The assistant now uses a typed, on-device intent classification and exposes only the one or two tools relevant to records, collections, notes or alarms. The subsequent real read/edit/reopen test passed. Read requests now have mutation authorization disabled; the model receives only read tools. Collection field kinds and templates are constrained enums, preventing unsupported generated type names. With the final constrained tool schemas, the first useful English result took 3.344 s, and read plus persisted follow-up edit took 7.839 s in that run. The same harness also passed a Spanish read and decimal-comma edit to 8.5, followed by reopening the store. A real-model hiking collection was created and validated with numeric and status fields and bilingual labels. This is a single Mac measurement, not an iPhone latency guarantee.
+The genuine model was exercised on synthetic data through the loopback helper:
 
-The opt-in iOS integration test was also attempted with the production record tools. Although the simulator reported model availability, generation failed with `com.apple.UnifiedAssetFramework` error 5000 while loading its model catalog. This is **not** a passed real-model iOS test. Blue maps that runtime failure to a localized model-not-ready message; manual editing remains available. Confirm the full production model flow offline on a compatible iPhone with Apple Intelligence ready.
+| Request | Observed result |
+| --- | --- |
+| Save Lake Walk in Trails with distance 5 | One collection/item saved; no invented description or private-topic web lookup |
+| Add a purple 🗿 Bass indicator and 🚬 collection icon | Exact emoji, label and color persisted |
+| Remove a populated distance field | Revision-bound confirmation proposed; field and value retained until approval |
+| Save Interstellar with public information | Wikipedia source titles, excerpts and links saved |
+| Set its rating to Spanish `8,5` | Numeric 8.5 persisted |
+| Add director and year from sources | Christopher Nolan and 2014 persisted; personal rating 8.5 retained |
+| Create/edit a Markdown checklist note | Heading and checkbox markers persisted; a specifically requested second item was added while preserving the first |
+
+The model can ask for clarification or miss an underspecified edit; a general checklist-add request required a more explicit follow-up in testing. No universal completion guarantee is implied. Individual synthetic requests took approximately 2–12 seconds on this Mac. These are observations, not latency guarantees. Wikipedia may return similarly named works; source links remain visible and users can review them. Factual filling is limited to evidence in returned excerpts, not arbitrary web research.
+
+The opt-in `scripts/test-bridge.sh` passed in `artifacts/Tests-20261108-131941.xcresult`: the simulator chat read Interstellar, changed its rating to 9.5 and verified that value after terminating/relaunching. This uses the actual Mac model, with no deterministic assistant. The final complete UI flow took 37.4 seconds, including typing, navigation, startup and relaunch. The ordinary simulator model test remains separate: Apple's simulator reports availability but generation fails with UnifiedAssetFramework error 5000 while loading its model catalog. The explicit DEBUG bridge works around that development-runtime limitation. It is compiled out of iPhone and Release builds. A compatible iPhone with Apple Intelligence ready must still pass its own offline check.
 
 ```sh
 scripts/test-model-mac.sh
+scripts/start-model-bridge.sh
+scripts/test-bridge.sh
+# Separate test of Apple's simulator model, when its assets work:
 BLUE_REAL_MODEL_TESTS=1 scripts/test.sh -only-testing:BlueTests/RealModelTests
 ```
-
-The smaller `scripts/model-smoke.swift` fixture is retained for separating system-model availability from the production tool integration.
 
 ## Performance method
 
 `scripts/profile.sh` uses optimized Release code, testability enabled only for the measurement build, coverage disabled, and isolated simulator data. The `PERFORMANCE_PROBE` compile flag enables dataset setup, not a fake assistant. It measures 27 seeded records and 10,000 records. Launch and scrolling use three samples; the pure search-and-sort query uses ten. Setup is excluded from measurement. Launch means a new app process against a prepared store, with simulator/OS caches potentially warm; it is not physical-device cold boot.
 
-The first baseline, before moving large collection queries to a cancellable background task, measured:
+The Release run `artifacts/Performance-20261108-133043.xcresult` passed all four UI performance tests and the pure query benchmark after the collection/assistant changes. It precedes only the final library favorite-star styling; no query, persistence, or collection-row code changed afterwards.
 
 | Metric | 27 records | 10,000 records |
 | --- | ---: | ---: |
-| XCTest first responsive frame, mean | 5.804 s | 6.908 s |
-| Scrolling peak physical memory, mean | 85.42 MB | 173.00 MB |
-| Swipe/deceleration interval, mean | 1.089 s | 2.562 s |
-| Search + numeric sort, median | 0.144 ms | 93.473 ms |
-| Search + numeric sort, maximum | 0.152 ms | 97.076 ms |
+| XCTest first responsive frame, mean | 2.890 s | 3.198 s |
+| Scrolling peak physical memory, mean (decimal MB) | 89.26 MB | 128.25 MB |
+| Swipe/deceleration interval, mean | 2.557 s | 2.556 s |
+| Search + numeric sort, median | 0.057 ms | 50.003 ms |
+| Search + numeric sort, maximum | 0.081 ms | 55.197 ms |
 
-The final Release run after the query/background and accessibility changes passed all four UI performance tests plus the query benchmark:
-
-| Metric | 27 records | 10,000 records |
-| --- | ---: | ---: |
-| XCTest first responsive frame, mean | 5.966 s | 6.315 s |
-| Scrolling peak physical memory, mean | 85.34 MB | 183.32 MB |
-| Swipe/deceleration interval, mean | 1.101 s | 2.573 s |
-| Search + numeric sort, median | 0.115 ms | 93.910 ms |
-| Search + numeric sort, maximum | 1.942 ms | 96.594 ms |
-
-The query change moves work away from the main actor; it does not claim a faster sorting algorithm. Stress peak memory increased by about 6% while retaining the cached result snapshot. Results are within the initial investigation budgets below. `XCTHitchMetric` was requested but emitted no hitch samples in either the log or the exported xcresult metrics on this simulator. A numerical hitch baseline remains pending hardware; no zero-hitch claim is made.
+These results remain within the investigation budgets below. Earlier UI versions measured 5.966/6.315-second responsiveness and 0.115/93.910-ms query medians on this Mac. Changed layouts, simulator state and caches prevent attributing that difference to a single optimization. `XCTHitchMetric` was requested but emitted no numerical hitch samples; no zero-hitch claim is made.
 
 XCTest launch values include the test environment's responsiveness instrumentation. They must not be presented as an iPhone launch guarantee. A swipe interval is not a hitch count.
 
@@ -91,6 +103,7 @@ Xcode 27.2 intermittently reports a SwiftUI “Invalid frame dimension” runtim
 - Personal Team signing and direct iPhone installation: no iPhone was connected during this task.
 - Real production assistant read/edit in Airplane Mode, ambiguity and tool-generated custom collection quality.
 - AlarmKit permission UI, actual sound while locked, silent/Focus behavior, recurrence, revocation, and time-zone changes on hardware. Tests of the adapter's failure paths do not prove OS delivery.
+- On-device microphone dictation, permission denial, interruption and stop behavior.
 - VoiceOver reading order and speech, keyboard ergonomics, and sustained battery/thermal performance.
 
 No alarm delivery or on-device model success is inferred from a fake scheduler or deterministic UI assistant. See [architecture](architecture.md) for persistence and scaling tradeoffs and [the workflow](../.github/workflows/checks.yml) for reproducible CI. CI uses the published `xcode-27` macOS runner with Xcode 27.1 and iOS 27.0, explicitly checked before testing; local results use the configuration above.

@@ -81,7 +81,7 @@ struct SettingsView: View {
             }
         }
         .fileExporter(
-            isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Blue-export-v1"
+            isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Blue-export-v2"
         ) { result in
             if case .failure = result { error = BlueError.saveFailed.key }
         }

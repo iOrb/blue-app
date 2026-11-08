@@ -6,7 +6,7 @@ final class PerformanceTests: XCTestCase {
         let arguments = ["--uitest"] + (stress ? ["--stress-data"] : [])
         app.launchArguments = arguments + ["--uitest-reset"]
         app.launch()
-        XCTAssertTrue(app.buttons["folder-template.movies"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.buttons["collection-template.movies"].waitForExistence(timeout: 60))
         app.terminate()
         app.launchArguments = arguments
         return app
@@ -17,14 +17,14 @@ final class PerformanceTests: XCTestCase {
         options.iterationCount = 3
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.launch()
-            XCTAssertTrue(app.buttons["folder-template.movies"].waitForExistence(timeout: 30))
+            XCTAssertTrue(app.buttons["collection-template.movies"].waitForExistence(timeout: 30))
             app.terminate()
         }
     }
     @MainActor private func scrollMetrics(stress: Bool) {
         let app = preparedApp(stress: stress)
         app.launch()
-        app.buttons["folder-template.movies"].tap()
+        app.buttons["collection-template.movies"].tap()
         let options = XCTMeasureOptions()
         options.iterationCount = 3
         measure(

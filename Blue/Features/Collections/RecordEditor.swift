@@ -7,6 +7,7 @@ struct RecordEditor: View {
     @Environment(Localizer.self) private var l
     @Environment(\.dismiss) private var dismiss
     @State private var draft: Record?
+    @State private var originalDraft: Record?
     @State private var markdown = ""
     @State private var originalMarkdown = ""
     @State private var error: String?
@@ -22,9 +23,21 @@ struct RecordEditor: View {
                         TextField(l("title"), text: recordBinding(\.title)).font(.title2.weight(.medium))
                             .accessibilityIdentifier("recordTitle")
                     }
+                    Section {
+                        IndicatorControl(
+                            field: collection.fields.first { $0.kind == .favorite } ?? .favoriteIndicator,
+                            selected: draft.isFavorite, showsLabel: true
+                        ) {
+                            let selected = !draft.isFavorite
+                            self.draft?.favorite = selected
+                            if let field = collection.fields.first(where: { $0.kind == .favorite }) {
+                                self.draft?.values[field.id] = .flag(selected)
+                            }
+                        }.accessibilityIdentifier("recordFavorite")
+                    }
                     if !collection.fields.isEmpty {
                         Section {
-                            ForEach(collection.fields) { field in
+                            ForEach(collection.fields.filter { $0.kind != .favorite }) { field in
                                 FieldValueEditor(field: field, value: valueBinding(field.id))
                             }
                         }
@@ -41,6 +54,19 @@ struct RecordEditor: View {
                             Text(l("record.personalNote"))
                             Spacer()
                             Button(l(preview ? "edit" : "preview")) { preview.toggle() }.textCase(nil)
+                        }
+                    }
+                    if let sources = draft.sources, !sources.isEmpty {
+                        Section(l("web.sources")) {
+                            ForEach(sources, id: \.url) { source in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Link(destination: source.url) {
+                                        Label(source.title, systemImage: "arrow.up.right.square")
+                                    }
+                                    Text(source.summary).font(.subheadline).foregroundStyle(.secondary)
+                                }.padding(.vertical, 6)
+                            }
+                            Text(l("web.attribution")).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     ErrorLine(key: error)
@@ -82,7 +108,16 @@ struct RecordEditor: View {
             } else if let collectionID {
                 draft = Record(collectionID: collectionID, title: "")
             }
+            originalDraft = draft
             markdown = draft.map { l.text($0.markdown) } ?? ""
+            originalMarkdown = markdown
+        }
+        .onChange(of: recordID.flatMap(store.record)?.revision) { _, _ in
+            guard draft == originalDraft, markdown == originalMarkdown, let fresh = recordID.flatMap(store.record)
+            else { return }
+            draft = fresh
+            originalDraft = fresh
+            markdown = l.text(fresh.markdown)
             originalMarkdown = markdown
         }
         .onChange(of: l.language) { _, _ in
@@ -137,15 +172,27 @@ struct FieldValueEditor: View {
                 .accessibilityLabel(l.text(field.label)).accessibilityIdentifier("field-\(field.id)")
             }
         case .status:
-            Picker(
-                l.text(field.label),
-                selection: Binding(get: { value?.text ?? "" }, set: { value = $0.isEmpty ? nil : .option($0) })
-            ) {
-                Text(l("value.empty")).tag("")
-                ForEach(field.options) { option in Text(l.text(option.label)).tag(option.id) }
-            }.accessibilityIdentifier("field-\(field.id)")
+            VStack(alignment: .leading, spacing: 10) {
+                Label(l.text(field.label), systemImage: field.kind.symbol).font(.subheadline).foregroundStyle(
+                    .secondary)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 130), alignment: .leading)], alignment: .leading, spacing: 8
+                ) {
+                    ForEach(field.options) { option in
+                        QuickChoice(
+                            title: l.text(option.label),
+                            symbol: value?.text == option.id ? "checkmark.circle.fill" : "circle",
+                            selected: value?.text == option.id
+                        ) {
+                            value = value?.text == option.id ? nil : .option(option.id)
+                        }.accessibilityIdentifier("option-\(option.id)")
+                    }
+                }
+            }.padding(.vertical, 4).accessibilityIdentifier("field-\(field.id)")
         case .checkbox, .favorite, .like:
-            Toggle(l.text(field.label), isOn: Binding(get: { value?.flag ?? false }, set: { value = .flag($0) }))
+            IndicatorControl(field: field, selected: value?.flag == true, showsLabel: true) {
+                value = .flag(!(value?.flag ?? false))
+            }.accessibilityIdentifier("field-\(field.id)")
         case .date:
             if case .date(let date) = value {
                 DatePicker(
