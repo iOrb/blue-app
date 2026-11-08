@@ -1,0 +1,802 @@
+{
+  "close": {
+    "en": "Close",
+    "es": "Cerrar"
+  },
+  "cancel": {
+    "en": "Cancel",
+    "es": "Cancelar"
+  },
+  "save": {
+    "en": "Save",
+    "es": "Guardar"
+  },
+  "create": {
+    "en": "Create",
+    "es": "Crear"
+  },
+  "delete": {
+    "en": "Delete",
+    "es": "Eliminar"
+  },
+  "edit": {
+    "en": "Edit",
+    "es": "Editar"
+  },
+  "preview": {
+    "en": "Preview",
+    "es": "Vista previa"
+  },
+  "title": {
+    "en": "Title",
+    "es": "Título"
+  },
+  "yes": {
+    "en": "Yes",
+    "es": "Sí"
+  },
+  "no": {
+    "en": "No",
+    "es": "No"
+  },
+  "undo": {
+    "en": "Undo last change",
+    "es": "Deshacer último cambio"
+  },
+  "expand": {
+    "en": "Expand folder",
+    "es": "Expandir carpeta"
+  },
+  "collapse": {
+    "en": "Collapse folder",
+    "es": "Contraer carpeta"
+  },
+  "discard": {
+    "en": "Discard changes",
+    "es": "Descartar cambios"
+  },
+  "discard.title": {
+    "en": "Discard your unsaved changes?",
+    "es": "¿Descartar los cambios sin guardar?"
+  },
+  "tab.notes": {
+    "en": "Notes",
+    "es": "Notas"
+  },
+  "tab.calendar": {
+    "en": "Calendar",
+    "es": "Calendario"
+  },
+  "library.notes": {
+    "en": "Loose notes",
+    "es": "Notas sueltas"
+  },
+  "library.empty": {
+    "en": "A little space for everything",
+    "es": "Un pequeño espacio para todo"
+  },
+  "library.search": {
+    "en": "Search your notes and collections",
+    "es": "Buscar en notas y colecciones"
+  },
+  "folder.title": {
+    "en": "Folder",
+    "es": "Carpeta"
+  },
+  "folder.new": {
+    "en": "New folder",
+    "es": "Nueva carpeta"
+  },
+  "folder.edit": {
+    "en": "Edit folder",
+    "es": "Editar carpeta"
+  },
+  "folder.parent": {
+    "en": "Inside",
+    "es": "Dentro de"
+  },
+  "folder.topLevel": {
+    "en": "Top level",
+    "es": "Nivel principal"
+  },
+  "folder.none": {
+    "en": "Loose notes",
+    "es": "Notas sueltas"
+  },
+  "folder.empty": {
+    "en": "Nothing here yet",
+    "es": "Aún no hay nada aquí"
+  },
+  "collection.new": {
+    "en": "New collection",
+    "es": "Nueva colección"
+  },
+  "collection.viewCount": {
+    "en": "View all · %ld",
+    "es": "Ver todo · %ld"
+  },
+  "collection.empty": {
+    "en": "Your list starts here",
+    "es": "Tu lista empieza aquí"
+  },
+  "collection.emptyHint": {
+    "en": "Add something worth keeping.",
+    "es": "Añade algo que quieras guardar."
+  },
+  "collection.search": {
+    "en": "Find in this collection",
+    "es": "Buscar en esta colección"
+  },
+  "collection.properties": {
+    "en": "Properties",
+    "es": "Propiedades"
+  },
+  "collection.options": {
+    "en": "Sort and filter",
+    "es": "Ordenar y filtrar"
+  },
+  "collection.startWith": {
+    "en": "Start with",
+    "es": "Empezar con"
+  },
+  "collection.delete": {
+    "en": "Delete collection",
+    "es": "Eliminar colección"
+  },
+  "collection.confirmDelete": {
+    "en": "Delete this collection and its records? You can undo this in Settings.",
+    "es": "¿Eliminar esta colección y sus registros? Puedes deshacerlo en Ajustes."
+  },
+  "record.new": {
+    "en": "New item",
+    "es": "Nuevo elemento"
+  },
+  "record.details": {
+    "en": "Details",
+    "es": "Detalles"
+  },
+  "record.personalNote": {
+    "en": "Personal note",
+    "es": "Nota personal"
+  },
+  "record.delete": {
+    "en": "Delete item",
+    "es": "Eliminar elemento"
+  },
+  "record.confirmDelete": {
+    "en": "Delete this item? You can undo this in Settings.",
+    "es": "¿Eliminar este elemento? Puedes deshacerlo en Ajustes."
+  },
+  "field.text": {
+    "en": "Text",
+    "es": "Texto"
+  },
+  "field.number": {
+    "en": "Number",
+    "es": "Número"
+  },
+  "field.rating": {
+    "en": "Rating",
+    "es": "Puntuación"
+  },
+  "field.date": {
+    "en": "Date",
+    "es": "Fecha"
+  },
+  "field.status": {
+    "en": "Status",
+    "es": "Estado"
+  },
+  "field.checkbox": {
+    "en": "Checkbox",
+    "es": "Casilla"
+  },
+  "field.like": {
+    "en": "Like",
+    "es": "Me gusta"
+  },
+  "field.favorite": {
+    "en": "Favorite",
+    "es": "Favorito"
+  },
+  "field.tags": {
+    "en": "Tags",
+    "es": "Etiquetas"
+  },
+  "field.clear": {
+    "en": "Clear value",
+    "es": "Borrar valor"
+  },
+  "field.addDate": {
+    "en": "Set %@",
+    "es": "Establecer %@"
+  },
+  "field.new": {
+    "en": "Add property",
+    "es": "Añadir propiedad"
+  },
+  "field.edit": {
+    "en": "Edit property",
+    "es": "Editar propiedad"
+  },
+  "field.type": {
+    "en": "Type",
+    "es": "Tipo"
+  },
+  "field.showInRow": {
+    "en": "Show in the list",
+    "es": "Mostrar en la lista"
+  },
+  "field.englishLabel": {
+    "en": "Label in English",
+    "es": "Nombre en inglés"
+  },
+  "field.spanishLabel": {
+    "en": "Label in Spanish",
+    "es": "Nombre en español"
+  },
+  "field.options": {
+    "en": "Options, separated by commas",
+    "es": "Opciones, separadas por comas"
+  },
+  "field.englishOptions": {
+    "en": "Options in English",
+    "es": "Opciones en inglés"
+  },
+  "field.spanishOptions": {
+    "en": "Options in Spanish",
+    "es": "Opciones en español"
+  },
+  "field.confirmMigration": {
+    "en": "Some existing values do not fit the new properties and will be removed. Continue?",
+    "es": "Algunos valores no son compatibles con las nuevas propiedades y se eliminarán. ¿Continuar?"
+  },
+  "value.empty": {
+    "en": "Not set",
+    "es": "Sin definir"
+  },
+  "rating.value": {
+    "en": "Rating: %@ out of 10",
+    "es": "Puntuación: %@ de 10"
+  },
+  "sort.title": {
+    "en": "Sort by title",
+    "es": "Ordenar por título"
+  },
+  "sort.updated": {
+    "en": "Sort by last edited",
+    "es": "Ordenar por última edición"
+  },
+  "sort.titleLabel": {
+    "en": "Sort by",
+    "es": "Ordenar por"
+  },
+  "sort.ascending": {
+    "en": "Ascending",
+    "es": "Ascendente"
+  },
+  "sort.descending": {
+    "en": "Descending",
+    "es": "Descendente"
+  },
+  "filters.title": {
+    "en": "Filters",
+    "es": "Filtros"
+  },
+  "filters.adjusted": {
+    "en": "Filters hiding this item were adjusted.",
+    "es": "Se han ajustado los filtros que ocultaban este elemento."
+  },
+  "filters.noResults": {
+    "en": "No matching items",
+    "es": "No hay coincidencias"
+  },
+  "filters.clearAll": {
+    "en": "Clear all",
+    "es": "Borrar todos"
+  },
+  "filters.remove": {
+    "en": "Remove filter: %@",
+    "es": "Quitar filtro: %@"
+  },
+  "filters.more": {
+    "en": "+%ld filters",
+    "es": "+%ld filtros"
+  },
+  "filters.onlySelected": {
+    "en": "Selected only",
+    "es": "Solo seleccionados"
+  },
+  "filters.useRange": {
+    "en": "Filter by range",
+    "es": "Filtrar por intervalo"
+  },
+  "filters.minimum": {
+    "en": "Minimum",
+    "es": "Mínimo"
+  },
+  "filters.maximum": {
+    "en": "Maximum",
+    "es": "Máximo"
+  },
+  "filters.atLeast": {
+    "en": "At least %@",
+    "es": "Al menos %@"
+  },
+  "filters.useDate": {
+    "en": "Filter by date",
+    "es": "Filtrar por fecha"
+  },
+  "filters.after": {
+    "en": "On or after",
+    "es": "A partir del"
+  },
+  "filters.contains": {
+    "en": "Contains…",
+    "es": "Contiene…"
+  },
+  "note.new": {
+    "en": "New note",
+    "es": "Nueva nota"
+  },
+  "note.markdown": {
+    "en": "Markdown text",
+    "es": "Texto Markdown"
+  },
+  "note.editor": {
+    "en": "Note",
+    "es": "Nota"
+  },
+  "note.delete": {
+    "en": "Delete note",
+    "es": "Eliminar nota"
+  },
+  "note.confirmDelete": {
+    "en": "Delete this note? You can undo this in Settings.",
+    "es": "¿Eliminar esta nota? Puedes deshacerlo en Ajustes."
+  },
+  "settings.title": {
+    "en": "Settings",
+    "es": "Ajustes"
+  },
+  "settings.language": {
+    "en": "Language",
+    "es": "Idioma"
+  },
+  "settings.intelligence": {
+    "en": "On this iPhone",
+    "es": "En este iPhone"
+  },
+  "settings.privacy": {
+    "en": "Your library and AI stay local. For public web lookups, Blue sends only the topic title to Wikipedia. Dictation stays on the device.",
+    "es": "Tu biblioteca y la IA son locales. Al consultar información pública, Blue solo envía el título a Wikipedia. El dictado se procesa en el dispositivo."
+  },
+  "settings.export": {
+    "en": "Export your data",
+    "es": "Exportar tus datos"
+  },
+  "settings.systemLanguage": {
+    "en": "Apple permission dialogs, the keyboard, and system alarm controls follow your iPhone language.",
+    "es": "Los permisos de Apple, el teclado y los controles de alarma del sistema siguen el idioma de tu iPhone."
+  },
+  "assistant.placeholder": {
+    "en": "Tell Blue…",
+    "es": "Cuéntale a Blue…"
+  },
+  "assistant.send": {
+    "en": "Send request",
+    "es": "Enviar petición"
+  },
+  "assistant.testMode": {
+    "en": "Test assistant · deterministic",
+    "es": "Asistente de pruebas · determinista"
+  },
+  "assistant.onDevice": {
+    "en": "Apple Intelligence is ready",
+    "es": "Apple Intelligence está disponible"
+  },
+  "assistant.enableIntelligence": {
+    "en": "Enable Apple Intelligence in iPhone Settings",
+    "es": "Activa Apple Intelligence en Ajustes del iPhone"
+  },
+  "assistant.deviceNotEligible": {
+    "en": "This device does not support the local model",
+    "es": "Este dispositivo no admite el modelo local"
+  },
+  "assistant.modelNotReady": {
+    "en": "The local model is not ready yet",
+    "es": "El modelo local aún no está listo"
+  },
+  "assistant.unavailable": {
+    "en": "The local model is unavailable",
+    "es": "El modelo local no está disponible"
+  },
+  "assistant.clarify": {
+    "en": "Please name one item and the change you want to make.",
+    "es": "Indica un elemento y el cambio que quieres hacer."
+  },
+  "assistant.noResults": {
+    "en": "Nothing found in your saved items.",
+    "es": "No se ha encontrado nada entre tus elementos guardados."
+  },
+  "assistant.chooseRecord": {
+    "en": "Which item did you mean?",
+    "es": "¿A qué elemento te refieres?"
+  },
+  "assistant.goToRow": {
+    "en": "Go to this item",
+    "es": "Ir a este elemento"
+  },
+  "assistant.updated": {
+    "en": "Saved · go to item",
+    "es": "Guardado · ir al elemento"
+  },
+  "assistant.showCalendar": {
+    "en": "Show in Calendar",
+    "es": "Ver en Calendario"
+  },
+  "character.idle": {
+    "en": "Blue is resting",
+    "es": "Blue está descansando"
+  },
+  "character.listening": {
+    "en": "Blue is listening",
+    "es": "Blue está escuchando"
+  },
+  "character.thinking": {
+    "en": "Blue is thinking",
+    "es": "Blue está pensando"
+  },
+  "character.searching": {
+    "en": "Blue is searching",
+    "es": "Blue está buscando"
+  },
+  "character.working": {
+    "en": "Blue is working",
+    "es": "Blue está trabajando"
+  },
+  "character.success": {
+    "en": "Blue has finished",
+    "es": "Blue ha terminado"
+  },
+  "character.error": {
+    "en": "Blue needs your attention",
+    "es": "Blue necesita tu atención"
+  },
+  "calendar.previous": {
+    "en": "Previous month",
+    "es": "Mes anterior"
+  },
+  "calendar.next": {
+    "en": "Next month",
+    "es": "Mes siguiente"
+  },
+  "calendar.today": {
+    "en": "Today",
+    "es": "Hoy"
+  },
+  "calendar.noAlarms": {
+    "en": "A quiet day.",
+    "es": "Un día tranquilo."
+  },
+  "calendar.hasAlarms": {
+    "en": "Contains alarms",
+    "es": "Tiene alarmas"
+  },
+  "alarm.new": {
+    "en": "New alarm",
+    "es": "Nueva alarma"
+  },
+  "alarm.edit": {
+    "en": "Edit alarm",
+    "es": "Editar alarma"
+  },
+  "alarm.name": {
+    "en": "Alarm name",
+    "es": "Nombre de la alarma"
+  },
+  "alarm.date": {
+    "en": "Date and time",
+    "es": "Fecha y hora"
+  },
+  "alarm.enabled": {
+    "en": "Enabled",
+    "es": "Activada"
+  },
+  "alarm.repeat": {
+    "en": "Repeat",
+    "es": "Repetir"
+  },
+  "alarm.repeats": {
+    "en": "Repeating",
+    "es": "Se repite"
+  },
+  "alarm.systemHint": {
+    "en": "Enabled alarms are scheduled with iOS and can sound while your iPhone is locked.",
+    "es": "Las alarmas activadas se programan en iOS y pueden sonar con el iPhone bloqueado."
+  },
+  "alarm.delete": {
+    "en": "Delete alarm",
+    "es": "Eliminar alarma"
+  },
+  "alarm.confirmDelete": {
+    "en": "Delete this alarm and cancel it on your iPhone?",
+    "es": "¿Eliminar esta alarma y cancelarla en tu iPhone?"
+  },
+  "alarm.deleted": {
+    "en": "Alarm deleted.",
+    "es": "Alarma eliminada."
+  },
+  "error.missing": {
+    "en": "This item no longer exists.",
+    "es": "Este elemento ya no existe."
+  },
+  "error.ambiguous": {
+    "en": "More than one item matches. Please use the exact title.",
+    "es": "Hay varios elementos coincidentes. Usa el título exacto."
+  },
+  "error.invalidValue": {
+    "en": "Check the value. Ratings must be between 0 and 10, and each property needs a valid value.",
+    "es": "Revisa el valor. Las puntuaciones deben estar entre 0 y 10 y cada propiedad necesita un valor válido."
+  },
+  "error.staleRevision": {
+    "en": "This item changed. Reopen it before saving again.",
+    "es": "Este elemento ha cambiado. Vuelve a abrirlo antes de guardar."
+  },
+  "error.folderDepth": {
+    "en": "Folders can have only two levels.",
+    "es": "Las carpetas solo pueden tener dos niveles."
+  },
+  "error.permissionDenied": {
+    "en": "Allow alarms for Blue in iPhone Settings, then try again.",
+    "es": "Permite las alarmas de Blue en Ajustes del iPhone y vuelve a intentarlo."
+  },
+  "error.alarmFailed": {
+    "en": "iOS could not update this alarm. No success has been assumed. Try again.",
+    "es": "iOS no ha podido actualizar esta alarma. No se ha dado por completada. Vuelve a intentarlo."
+  },
+  "error.saveFailed": {
+    "en": "Your changes could not be saved. Please try again.",
+    "es": "No se han podido guardar los cambios. Vuelve a intentarlo."
+  },
+  "error.modelUnavailable": {
+    "en": "The on-device model is unavailable. You can still browse and edit everything manually.",
+    "es": "El modelo local no está disponible. Puedes seguir consultando y editando todo manualmente."
+  },
+  "error.cancelled": {
+    "en": "Request cancelled.",
+    "es": "Petición cancelada."
+  },
+  "error.unsupported": {
+    "en": "Blue could not complete that request. Try naming a saved item or use its controls.",
+    "es": "Blue no ha podido completar la petición. Prueba con el nombre de un elemento guardado o usa sus controles."
+  },
+  "error.emptyTitle": {
+    "en": "Add a title first.",
+    "es": "Añade un título primero."
+  },
+  "startup.recovery": {
+    "en": "Your saved data has not been erased. Restart Blue, or check available iPhone storage.",
+    "es": "Tus datos guardados no se han borrado. Reinicia Blue o comprueba el espacio disponible en el iPhone."
+  },
+  "demo.noteTitle": {
+    "en": "A slower kind of Sunday",
+    "es": "Un domingo sin prisas"
+  },
+  "demo.noteBody": {
+    "en": "# A slower kind of Sunday\n\nLeave a little room for the unexpected.\n\n- [ ] Walk without a destination\n- [ ] Find a new bookshop\n- [x] Make good coffee\n\n> Pay attention. The small things are the big things.",
+    "es": " # Un domingo sin prisas\n\nDeja un poco de espacio para lo inesperado.\n\n- [ ] Pasear sin rumbo\n- [ ] Encontrar una librería nueva\n- [x] Preparar un buen café\n\n> Presta atención. Lo pequeño es lo importante."
+  },
+  "demo.weekendTitle": {
+    "en": "Places, spaces, ideas",
+    "es": "Lugares, espacios, ideas"
+  },
+  "demo.weekendBody": {
+    "en": "# Architecture worth a detour\n\n**Barcelona Pavilion** — light, stone, and silence.\n\nLook again at how a room can feel open without being empty.\n\n[Plan a visit](https://miesbcn.com)",
+    "es": " # Arquitectura que merece un desvío\n\n**Pabellón de Barcelona** — luz, piedra y silencio.\n\nVolver a mirar cómo una habitación puede sentirse abierta sin estar vacía.\n\n[Planear una visita](https://miesbcn.com)"
+  },
+  "demo.interstellar": {
+    "en": "A film about distance, time, and the things that bring us home.\n\n**Watch again** for the score.",
+    "es": "Una película sobre la distancia, el tiempo y lo que nos hace volver a casa.\n\n**Volver a verla** por la banda sonora."
+  },
+  "Stop": {
+    "en": "Stop",
+    "es": "Detener"
+  },
+  "template.movies": {
+    "en": "Movies",
+    "es": "Películas"
+  },
+  "template.tv": {
+    "en": "TV Shows",
+    "es": "Series"
+  },
+  "template.games": {
+    "en": "Video Games",
+    "es": "Videojuegos"
+  },
+  "template.artists": {
+    "en": "Artists",
+    "es": "Artistas"
+  },
+  "template.food": {
+    "en": "Food",
+    "es": "Comida"
+  },
+  "template.restaurants": {
+    "en": "Restaurants",
+    "es": "Restaurantes"
+  },
+  "template.simple": {
+    "en": "A simple list with notes",
+    "es": "Una lista sencilla con notas"
+  },
+  "status.wantWatch": {
+    "en": "Want to Watch",
+    "es": "Quiero ver"
+  },
+  "status.watched": {
+    "en": "Watched",
+    "es": "Vista"
+  },
+  "status.watching": {
+    "en": "Watching",
+    "es": "Viendo"
+  },
+  "status.finished": {
+    "en": "Finished",
+    "es": "Terminado"
+  },
+  "status.wantPlay": {
+    "en": "Want to Play",
+    "es": "Quiero jugar"
+  },
+  "status.playing": {
+    "en": "Playing",
+    "es": "Jugando"
+  },
+  "status.wantExplore": {
+    "en": "Want to Explore",
+    "es": "Quiero descubrir"
+  },
+  "status.exploring": {
+    "en": "Exploring",
+    "es": "Descubriendo"
+  },
+  "status.wantTry": {
+    "en": "Want to Try",
+    "es": "Quiero probar"
+  },
+  "status.tried": {
+    "en": "Tried",
+    "es": "Probado"
+  },
+  "status.wantVisit": {
+    "en": "Want to Visit",
+    "es": "Quiero visitar"
+  },
+  "status.visited": {
+    "en": "Visited",
+    "es": "Visitado"
+  },
+  "done": {
+    "en": "Done",
+    "es": "Hecho"
+  },
+  "folder.delete": {
+    "en": "Delete folder",
+    "es": "Eliminar carpeta"
+  },
+  "folder.confirmDelete": {
+    "en": "Delete this folder and everything inside it? You can undo this in Settings.",
+    "es": "¿Eliminar esta carpeta y todo su contenido? Puedes deshacerlo en Ajustes."
+  },
+  "library.scope.all": {
+    "en": "All",
+    "es": "Todo"
+  },
+  "library.scope.notes": {
+    "en": "Notes",
+    "es": "Notas"
+  },
+  "library.scope.collections": {
+    "en": "Collections",
+    "es": "Colecciones"
+  },
+  "library.scope.favorites": {
+    "en": "Favorites",
+    "es": "Favoritos"
+  },
+  "library.startTitle": {
+    "en": "A place for whatever matters.",
+    "es": "Un lugar para lo que te importa."
+  },
+  "library.startHint": {
+    "en": "Tell Blue what you want to keep. A film, a place, an idea — the collection takes shape with you.",
+    "es": "Dile a Blue qué quieres guardar. Una película, un lugar, una idea… La colección toma forma contigo."
+  },
+  "library.askBlue": {
+    "en": "Tell Blue",
+    "es": "Cuéntaselo a Blue"
+  },
+  "collection.growsWithYou": {
+    "en": "Start with a name. Ask Blue to add useful details whenever you need them.",
+    "es": "Empieza con un nombre. Pide a Blue los detalles que necesites cuando quieras."
+  },
+  "assistant.showConversation": {
+    "en": "Show or hide Blue’s reply",
+    "es": "Mostrar u ocultar la respuesta de Blue"
+  },
+  "assistant.macBridge": {
+    "en": "Apple Intelligence on this Mac · Simulator",
+    "es": "Apple Intelligence en este Mac · Simulador"
+  },
+  "dictation.start": {
+    "en": "Dictate to Blue",
+    "es": "Hablar con Blue"
+  },
+  "dictation.stop": {
+    "en": "Stop dictation",
+    "es": "Terminar dictado"
+  },
+  "dictation.listening": {
+    "en": "Listening…",
+    "es": "Te escucho…"
+  },
+  "dictation.permission": {
+    "en": "Allow Microphone and Speech Recognition in Settings to dictate.",
+    "es": "Permite el micrófono y el reconocimiento de voz en Ajustes para dictar."
+  },
+  "dictation.unavailable": {
+    "en": "On-device dictation is unavailable here. You can keep typing.",
+    "es": "El dictado local no está disponible aquí. Puedes seguir escribiendo."
+  },
+  "web.sources": {
+    "en": "From the web",
+    "es": "De la web"
+  },
+  "web.attribution": {
+    "en": "Wikipedia · CC BY-SA. Public sources may refer to different works; open a link to check. Your personal notes stay separate.",
+    "es": "Wikipedia · CC BY-SA. Las fuentes pueden referirse a obras distintas; abre el enlace para comprobarlo. Tus notas personales se guardan aparte."
+  },
+  "error.webUnavailable": {
+    "en": "I couldn’t retrieve reliable public information. Your saved details haven’t changed.",
+    "es": "No he podido obtener información pública fiable. Tus datos guardados siguen igual."
+  },
+  "field.icon": {
+    "en": "Emoji or symbol",
+    "es": "Emoji o símbolo"
+  },
+  "assistant.contextTooLong": {
+    "en": "That request became too large. Try one change at a time.",
+    "es": "La petición se ha hecho demasiado grande. Prueba con un cambio cada vez."
+  },
+  "color.blue": {
+    "en": "Blue",
+    "es": "Azul"
+  },
+  "color.purple": {
+    "en": "Purple",
+    "es": "Morado"
+  },
+  "color.orange": {
+    "en": "Orange",
+    "es": "Naranja"
+  },
+  "color.green": {
+    "en": "Green",
+    "es": "Verde"
+  },
+  "color.red": {
+    "en": "Red",
+    "es": "Rojo"
+  },
+  "color.pink": {
+    "en": "Pink",
+    "es": "Rosa"
+  },
+  "color.yellow": {
+    "en": "Yellow",
+    "es": "Amarillo"
+  }
+}
