@@ -45,10 +45,18 @@ Current production Worker HTTP checks pass four negative cases: unauthenticated 
 
 No numerical hitch result was emitted; no zero-hitch claim is made. Collection queries and persistence diffing are on the main actor; this is a bounded personal-library implementation, not a paginated database.
 
+## Physical installation
+
+On 8 November 2026, Blue commit `5e7a8fd` was installed on an iPhone 13 mini running iOS 27.3, paired over Wi-Fi with Developer Mode enabled. The local signing team selection stays in the Mac's working copy. These commands omit the phone's name:
+
+- `xcodebuild -project Blue.xcodeproj -scheme Blue -configuration Debug -destination 'platform=iOS,name=<device-name>' -destination-timeout 15 -derivedDataPath .build-device -allowProvisioningUpdates -allowProvisioningDeviceRegistration build` registered the phone and built a signed app. `codesign --verify --strict --deep .build-device/Build/Products/Debug-iphoneos/Blue.app` passed.
+- `xcrun devicectl device install app --device '<device-name>' --timeout 45 .build-device/Build/Products/Debug-iphoneos/Blue.app` succeeded. `xcrun devicectl device info apps --device '<device-name>' --bundle-id app.iorb.blue.ios --timeout 12` confirmed version 1.0, build 1.
+- iOS initially rejected launch until the developer profile was trusted. `xcrun devicectl device process launch --device '<device-name>' --timeout 12 app.iorb.blue.ios` then succeeded, and `xcrun devicectl device info processes --device '<device-name>' --search 'Blue.app/Blue' --timeout 10` confirmed the app was running.
+
 ## Remaining physical and integration checks
 
 - Recover the Mac's Apple model service, then rerun `scripts/test-model-mac.sh`, `scripts/test-model-mac.sh scripts/conversation-integration-mac.swift`, and genuine web conversation checks. No account or distribution credentials are required for this blocker. No universal language-understanding claim is made; pending proposals and new semantic classifier still require that final integration regression.
-- Personal Team signing, physical installation, iPhone Safari/Home Screen, microphone permission/interruption and VoiceOver reading order remain unverified on hardware.
+- iPhone Safari/Home Screen, microphone permission/interruption and VoiceOver reading order remain unverified on hardware.
 - Actual AlarmKit authorization/delivery, recurrence, Focus/silent behavior, revocation and time-zone changes require an iPhone. Calendar events do not ring.
 - Browser storage is local to that browser; the private one-time import is not continuous native/web synchronization. No offline service worker.
 - Xcode's optional diagnostics collector may report missing global simctl/debugger metadata because xcode-select stays on Command Line Tools. The scripts explicitly select Xcode; completed build/test results are reported separately from these diagnostics.

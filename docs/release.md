@@ -9,7 +9,7 @@ Blue uses your free Apple Account (Personal Team) for direct installation from X
 3. On the iPhone, enable Settings → Privacy & Security → Developer Mode and complete the required restart/confirmation. Do this yourself on the device.
 4. Select the **Blue** project → **Blue** target → **Signing & Capabilities**. Keep **Automatically manage signing** enabled. Choose your name **(Personal Team)** from Team. Only the app target needs device signing for a normal Run.
 5. The proposed bundle ID is `app.iorb.blue.ios`. If Xcode says it is unavailable, use a unique identifier such as `app.iorb.blue.personal.<your-suffix>`. Keep it stable after installation so future builds update the same app and preserve its data. Make the same change in `project.yml` before regenerating the project; account/team settings can stay local.
-6. Select your physical iPhone as the run destination and press **⌘R**. Xcode creates development signing assets and installs Blue. If iOS asks to trust your developer identity, follow the device's Settings → General → VPN & Device Management prompt.
+6. Select your physical iPhone as the run destination and press **⌘R**. Xcode registers the selected device, creates a development profile and installs Blue. If the Signing pane reports that your team has no devices, select the paired iPhone before running so Xcode can register it. If iOS asks to trust your developer identity, follow the device's Settings → General → VPN & Device Management prompt.
 
 No `.p12`, `.p8`, App Store profile, App Store app record, API key or GitHub secret is needed. A simulator build does not need an Apple Account at all.
 
@@ -25,6 +25,6 @@ iOS 27 enables wireless first pairing in Device Hub, but it does not add Apple I
 - Create an alarm a few minutes ahead, grant the AlarmKit permission, lock the phone, and verify delivery. Check silent/Focus modes, permission denial, disable/delete, recurrence and time-zone changes. Personal Team installation itself does not establish these behaviors.
 - Review Dynamic Type, VoiceOver reading order, Reduce Motion and keyboard interactions on the real display.
 
-On 8 November the owner reported updating the iPhone to iOS 27 and enabling Developer Mode. The Mac's Wi-Fi status is connected, but the latest devicectl check still listed only simulators, with zero valid development signing identities. Wireless pairing, Personal Team setup and physical installation are therefore still pending. Select your Personal Team locally when connecting the device; nothing about this blocks simulator development.
+On 8 November 2026, Blue 1.0 (build 1) was signed with a Personal Team, installed over Wi-Fi, and launched on a physical iPhone 13 mini running iOS 27.3. The first launch succeeded after the developer profile was trusted on the iPhone.
 
 Sources: [iOS 27 wireless pairing in Device Hub](https://developer.apple.com/documentation/xcode/pairing-your-devices-with-your-mac), [Apple account and Personal Team limits](https://developer.apple.com/help/account/basics/about-your-developer-account/), [running on devices](https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices), [assigning a team](https://help.apple.com/xcode/mac/current/en.lproj/dev23aab79b4.html).
