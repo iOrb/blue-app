@@ -15,6 +15,10 @@ macOS 26.6.2, Apple silicon, Xcode 27.2 (27B52), Swift 6.4.2; Swift 6 complete c
 
 All seven normal-size UI flows pass in `Tests-20261108-205436.xcresult` using `BLUE_DEVICE_NAME='Blue Verification' scripts/test.sh -only-testing:BlueUITests/BlueUITests`. This includes maximum accessibility text size/dark appearance, overview/calendar, chat Enter/result/draft preservation, collection sorting/number picker/relaunch, event autosave/delete cancellation, plain-note lifecycle and Spanish touch targets. Native UI tests use the explicitly identified DEBUG assistant double; they do not establish real model correctness.
 
+After the final collection-title synchronization fix, the collection sorting/number-picker/relaunch flow was rerun (`Tests-20261108-210834.xcresult`, one UI test passed), followed by Release and unsigned iPhone SDK compilation. The open collection now observes store-driven title changes; the rerun checks the surrounding collection flow, not real-model renaming.
+
+GitHub Actions [run 42517925858](https://github.com/iOrb/blue-app/actions/runs/42517925858) passed for public redesign commit `2f5e32478a53dbb562ad42472476ecd39d791ea6`: formatting/localization, compilation/tests, Release and unsigned iPhone SDK compilation. The small title-observer follow-up was verified locally as described above.
+
 ## Visual inspection
 
 Compact native screenshots were inspected in both English and Spanish: centered collection title/count, left sort row, fixed back/options, filled eye indicators, centered detail properties and plain notes. Web inspection at 375 × 812 and desktop width verifies the same hierarchy, fixed controls during scroll, a floating Blue button within item details, a top chat composer, hidden section navigation and a centered delete modal with a top-right cross. Cancelling the web modal preserves the item. The published authenticated Spanish page retains existing lists, favorites and custom emoji indicators. Public screenshot fixtures in `docs/screenshots` contain test data; live user screenshots remain ignored under `artifacts`.

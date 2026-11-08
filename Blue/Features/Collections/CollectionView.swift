@@ -132,6 +132,7 @@ struct CollectionView: View {
             }
             .onAppear { title = l.text(collection.title) }
             .onChange(of: l.language) { _, _ in title = l.text(collection.title) }
+            .onChange(of: collection.title) { _, value in title = l.text(value) }
         }
     }
 }
