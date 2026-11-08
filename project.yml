@@ -1,0 +1,72 @@
+name: Blue
+options:
+  bundleIdPrefix: app.iorb
+  deploymentTarget:
+    iOS: '26.0'
+  developmentLanguage: en
+  knownRegions: [en, es, Base]
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    MARKETING_VERSION: '1.0.0'
+    CURRENT_PROJECT_VERSION: '1'
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: NO
+    DEVELOPMENT_TEAM: ''
+targets:
+  Blue:
+    type: application
+    platform: iOS
+    sources:
+      - path: Blue
+        excludes: [Resources/Info.plist]
+    info:
+      path: Blue/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Blue
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, es]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAlarmKitUsageDescription: Blue schedules the alarms you create, even when your iPhone is locked.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.iorb.blue.ios
+        TARGETED_DEVICE_FAMILY: '1'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  BlueTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [BlueTests]
+    dependencies:
+      - target: Blue
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  BlueUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [BlueUITests]
+    dependencies:
+      - target: Blue
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Blue:
+    build:
+      targets:
+        Blue: all
+    test:
+      targets: [BlueTests, BlueUITests]
+      gatherCoverageData: true
+    profile:
+      config: Release
+    archive:
+      config: Release

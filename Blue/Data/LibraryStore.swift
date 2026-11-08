@@ -1,0 +1,235 @@
+import Foundation
+import Observation
+import SwiftData
+
+enum BlueSchemaV1: VersionedSchema {
+    static let versionIdentifier = Schema.Version(1, 0, 0)
+    static var models: [any PersistentModel.Type] { [StoredItem.self] }
+
+    @Model
+    final class StoredItem {
+        @Attribute(.unique) var key: String
+        var payload: Data
+        init(key: String, payload: Data) {
+            self.key = key
+            self.payload = payload
+        }
+    }
+}
+
+enum BlueMigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] { [BlueSchemaV1.self] }
+    static var stages: [MigrationStage] { [] }
+}
+
+@MainActor
+@Observable
+final class LibraryStore {
+    private(set) var state: LibraryState
+    private(set) var canUndo = false
+    let container: ModelContainer
+    private let context: ModelContext
+    private var entities: [String: BlueSchemaV1.StoredItem] = [:]
+    private var undoStates: [LibraryState] = []
+
+    init(inMemory: Bool = false, url: URL? = nil, seed: Bool = true) throws {
+        let schema = Schema(versionedSchema: BlueSchemaV1.self)
+        let config: ModelConfiguration
+        if let url {
+            config = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        } else {
+            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory, cloudKitDatabase: .none)
+        }
+        container = try ModelContainer(for: schema, migrationPlan: BlueMigrationPlan.self, configurations: config)
+        context = ModelContext(container)
+        context.autosaveEnabled = false
+        let rows = try context.fetch(FetchDescriptor<BlueSchemaV1.StoredItem>())
+        entities = Dictionary(uniqueKeysWithValues: rows.map { ($0.key, $0) })
+        state = LibraryState()
+        let decoder = JSONDecoder()
+        for row in rows {
+            switch row.key.split(separator: ":").first {
+            case "folder": state.folders.append(try decoder.decode(Folder.self, from: row.payload))
+            case "collection": state.collections.append(try decoder.decode(Collection.self, from: row.payload))
+            case "record": state.records.append(try decoder.decode(Record.self, from: row.payload))
+            case "note": state.notes.append(try decoder.decode(Note.self, from: row.payload))
+            case "alarm": state.alarms.append(try decoder.decode(SavedAlarm.self, from: row.payload))
+            default: break
+            }
+        }
+        state.collections.sort { $0.createdAt < $1.createdAt }
+        if entities["metadata:initialized"] == nil {
+            if seed { state = StarterLibrary.make() }
+            try persist(state)
+        }
+    }
+
+    private func persist(_ state: LibraryState) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var payloads = ["metadata:initialized": Data([1])]
+        func encode<T: Encodable & Identifiable>(_ values: [T], kind: String) throws where T.ID == UUID {
+            for value in values { payloads["\(kind):\(value.id.uuidString)"] = try encoder.encode(value) }
+        }
+        try encode(state.folders, kind: "folder")
+        try encode(state.collections, kind: "collection")
+        try encode(state.records, kind: "record")
+        try encode(state.notes, kind: "note")
+        try encode(state.alarms, kind: "alarm")
+        for (key, value) in payloads {
+            if let entity = entities[key] {
+                if entity.payload != value { entity.payload = value }
+            } else {
+                let entity = BlueSchemaV1.StoredItem(key: key, payload: value)
+                context.insert(entity)
+                entities[key] = entity
+            }
+        }
+        for key in Array(entities.keys) where payloads[key] == nil {
+            if let entity = entities.removeValue(forKey: key) { context.delete(entity) }
+        }
+        do { try context.save() } catch {
+            context.rollback()
+            entities = Dictionary(
+                uniqueKeysWithValues: try context.fetch(FetchDescriptor<BlueSchemaV1.StoredItem>()).map { ($0.key, $0) }
+            )
+            throw BlueError.saveFailed
+        }
+    }
+
+    func update(undoable: Bool = true, _ mutation: (inout LibraryState) throws -> Void) throws {
+        var next = state
+        try mutation(&next)
+        try persist(next)
+        if undoable {
+            undoStates.append(state)
+            if undoStates.count > 10 { undoStates.removeFirst() }
+        }
+        state = next
+        canUndo = !undoStates.isEmpty
+    }
+
+    func undo() throws {
+        guard var previous = undoStates.last else { return }
+        // System alarms cannot be undone by restoring local data.
+        previous.alarms = state.alarms
+        try persist(previous)
+        state = previous
+        undoStates.removeLast()
+        canUndo = !undoStates.isEmpty
+    }
+
+    func record(_ id: UUID) -> Record? { state.records.first { $0.id == id } }
+    func collection(_ id: UUID) -> Collection? { state.collections.first { $0.id == id } }
+    func records(in id: UUID) -> [Record] { state.records.filter { $0.collectionID == id } }
+
+    func saveRecord(_ record: Record, expectedRevision: Int?) throws {
+        try Validation.title(record.title)
+        guard let collection = collection(record.collectionID) else { throw BlueError.missing }
+        for (id, value) in record.values {
+            guard let field = collection.fields.first(where: { $0.id == id }) else { throw BlueError.invalidValue }
+            try Validation.field(field, value: value)
+        }
+        try update { state in
+            var saved = record
+            saved.updatedAt = Date()
+            if let index = state.records.firstIndex(where: { $0.id == record.id }) {
+                guard expectedRevision == state.records[index].revision else { throw BlueError.staleRevision }
+                saved.revision = state.records[index].revision + 1
+                state.records[index] = saved
+            } else {
+                guard expectedRevision == nil else { throw BlueError.missing }
+                state.records.append(saved)
+            }
+        }
+    }
+
+    func setValue(recordID: UUID, fieldID: String, value: FieldValue?, revision: Int) throws {
+        guard var record = record(recordID) else { throw BlueError.missing }
+        record.values[fieldID] = value
+        try saveRecord(record, expectedRevision: revision)
+    }
+
+    func createCollection(title: String, fields: [FieldDefinition], folderID: UUID? = nil) throws -> UUID {
+        try Validation.title(title)
+        let folder = Folder(title: .user(title))
+        let collection = Collection(folderID: folderID ?? folder.id, title: .user(title), fields: fields)
+        try Validation.collection(collection)
+        try update { state in
+            if let folderID {
+                guard state.folders.contains(where: { $0.id == folderID }) else { throw BlueError.missing }
+            } else {
+                state.folders.append(folder)
+            }
+            state.collections.append(collection)
+        }
+        return collection.id
+    }
+
+    func saveCollection(_ collection: Collection) throws {
+        try Validation.collection(collection)
+        try update { state in
+            guard let index = state.collections.firstIndex(where: { $0.id == collection.id }) else {
+                throw BlueError.missing
+            }
+            state.collections[index] = collection
+            for index in state.records.indices where state.records[index].collectionID == collection.id {
+                let old = state.records[index].values
+                state.records[index].values = old.filter { key, value in
+                    guard let field = collection.fields.first(where: { $0.id == key }) else { return false }
+                    return (try? Validation.field(field, value: value)) != nil
+                }
+                state.records[index].revision += 1
+            }
+        }
+    }
+
+    func saveNote(_ note: Note, expectedRevision: Int?) throws {
+        try update { state in
+            var saved = note
+            saved.updatedAt = Date()
+            if let index = state.notes.firstIndex(where: { $0.id == note.id }) {
+                guard expectedRevision == state.notes[index].revision else { throw BlueError.staleRevision }
+                saved.revision += 1
+                state.notes[index] = saved
+            } else {
+                guard expectedRevision == nil else { throw BlueError.missing }
+                state.notes.append(saved)
+            }
+        }
+    }
+
+    func saveFolder(_ folder: Folder) throws {
+        try Validation.folder(parentID: folder.parentID, in: state.folders)
+        guard folder.parentID != folder.id else { throw BlueError.folderDepth }
+        if folder.parentID != nil && state.folders.contains(where: { $0.parentID == folder.id }) {
+            throw BlueError.folderDepth
+        }
+        try update { state in
+            if let index = state.folders.firstIndex(where: { $0.id == folder.id }) {
+                state.folders[index] = folder
+            } else {
+                state.folders.append(folder)
+            }
+        }
+    }
+
+    func deleteFolder(_ id: UUID) throws {
+        guard state.folders.contains(where: { $0.id == id }) else { throw BlueError.missing }
+        let folderIDs = Set([id] + state.folders.filter { $0.parentID == id }.map(\.id))
+        let collectionIDs = Set(state.collections.filter { folderIDs.contains($0.folderID) }.map(\.id))
+        try update { state in
+            state.records.removeAll { collectionIDs.contains($0.collectionID) }
+            state.collections.removeAll { collectionIDs.contains($0.id) }
+            state.notes.removeAll { $0.folderID.map(folderIDs.contains) ?? false }
+            state.folders.removeAll { folderIDs.contains($0.id) }
+        }
+    }
+
+    func export() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(state)
+    }
+}

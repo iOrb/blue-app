@@ -1,0 +1,5 @@
+Blue 1.0 — a quiet home for your notes, collections, and alarms.
+
+Try editing an item, filtering a collection, and switching between English and Spanish. On an Apple Intelligence-compatible iPhone, ask Blue for Interstellar's rating, jump to that exact item, and change its rating. Relaunch to verify your changes are saved. Create an alarm and check that it sounds with the iPhone locked.
+
+Notes and requests stay on your device. Install directly from Xcode with your Personal Team.

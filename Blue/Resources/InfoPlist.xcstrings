@@ -1,0 +1,23 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSAlarmKitUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue schedules the alarms you create, even when your iPhone is locked."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue programa las alarmas que creas, incluso cuando el iPhone está bloqueado."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

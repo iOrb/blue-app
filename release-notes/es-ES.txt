@@ -1,0 +1,5 @@
+Blue 1.0 — un espacio tranquilo para tus notas, colecciones y alarmas.
+
+Prueba a editar un elemento, filtrar una colección y cambiar entre inglés y español. En un iPhone compatible con Apple Intelligence, pregunta por la puntuación de Interstellar, ve al elemento exacto y cambia su puntuación. Reinicia la app para comprobar que los cambios se guardan. Crea una alarma y comprueba que suena con el iPhone bloqueado.
+
+Las notas y peticiones se quedan en tu dispositivo. Instálala directamente desde Xcode con tu Personal Team.

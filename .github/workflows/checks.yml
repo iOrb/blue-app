@@ -1,0 +1,42 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: xcode-27
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      BLUE_EXPECTED_XCODE: '27.1'
+      BLUE_RUNTIME_IDENTIFIER: com.apple.CoreSimulator.SimRuntime.iOS-27-0
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify selected toolchain
+        run: scripts/verify-toolchain.sh
+      - name: Formatting and localization
+        run: scripts/check.sh
+      - name: Compile and test
+        run: scripts/test.sh
+      - name: Release compilation
+        run: scripts/build.sh Release
+      - name: Unsigned iPhone SDK compilation
+        run: scripts/build-device.sh
+      - name: Retain verification results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verification-${{ github.run_id }}
+          path: |
+            artifacts/*.log
+            artifacts/*.xcresult
+          retention-days: 7
