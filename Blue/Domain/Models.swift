@@ -306,7 +306,7 @@ enum MutationIntent {
             "eliminar", "borra", "borrar", "quita", "renombra", "mueve", "programa", "activa", "desactiva", "marca",
             "puntua", "guarda", "modifica", "modify", "personaliza", "apunta", "anota", "rellena", "completa",
             "enriquece", "fill", "enrich", "complete",
-            "capture",
+            "capture", "edit", "editar", "edita", "replace", "reemplaza", "reemplazar", "sustituye", "sustituir",
         ]
         return !actions.isDisjoint(with: words)
     }

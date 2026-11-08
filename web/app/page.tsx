@@ -477,7 +477,7 @@ export default function Blue() {
           prompt: sent,
           language,
           library: current.current,
-          previousRecord: item?.id || previous,
+          previousRecord: note ? undefined : item?.id || previous,
           collectionID: collection?.id,
           noteID: note?.id,
         }),

@@ -451,7 +451,7 @@ final class AssistantService {
                 Classify the current request into one area only.
                 records: read or edit an individual saved item, its rating, status or written note. A Spanish movie 'nota' is a rating.
                 collections: create a collection or list, or show/sort/filter several items.
-                notes: create or find a standalone Markdown note.
+                notes: create, find, or edit a standalone Markdown note.
                 alarms: find, create or delete an alarm.
                 capture: save a NEW item, for example "Guarda Arrival con un 9 en películas".
                 adapt: add properties to an EXISTING item or fill fields from public web sources, for example "Añade director y año a Interstellar buscándolo en la web".
@@ -485,6 +485,13 @@ final class AssistantService {
             area = .schema
         } else if !captureWords.isDisjoint(with: words) && !words.contains("note") && !words.contains("nota") {
             area = .capture
+        } else if selectedNote != nil,
+            !Set(["note", "notes", "nota", "notas", "markdown", "paragraph", "parrafo", "checklist"]).isDisjoint(
+                with: words),
+            Set(["rating", "puntuacion", "score"]).isDisjoint(with: words)
+        {
+            // Explicit requests about the open note must not be routed to record tools.
+            area = .notes
         } else {
             area = try await router.respond(to: prompt, generating: AssistantArea.self).content
         }

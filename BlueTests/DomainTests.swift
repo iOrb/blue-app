@@ -4,6 +4,19 @@ import Testing
 @testable import Blue
 
 struct DomainTests {
+    @Test func explicitNoteEditingVerbsAuthorizeChanges() {
+        for prompt in [
+            "Edit my Safari note", "Replace the second paragraph", "Edita mi nota de viajes", "Puedes editar esta nota",
+            "Sustituye el título", "Reemplaza el último párrafo",
+        ] {
+            #expect(MutationIntent.isExplicit(prompt))
+        }
+        for prompt in [
+            "How do I edit a note?", "Do not replace this note", "No edites mi nota", "¿Cómo puedo editar una nota?",
+        ] {
+            #expect(!MutationIntent.isExplicit(prompt))
+        }
+    }
     @Test func readQuestionsAndNegationsCannotAuthorizeWrites() {
         for prompt in [
             "What rating did I give Interstellar?", "¿Qué puntuación le puse a Interstellar?", "Don't change Dune",
