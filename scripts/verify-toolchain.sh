@@ -1,6 +1,6 @@
 #!/bin/bash
 source "$(dirname "$0")/env.sh"
-BLUE_ACTUAL_XCODE="$(xcodebuild -version | head -n 1 | cut -d ' ' -f 2)"
+BLUE_ACTUAL_XCODE="$(xcodebuild -version | awk '$1 == "Xcode" { print $2 }')"
 if [ -n "${BLUE_EXPECTED_XCODE:-}" ] && [ "$BLUE_ACTUAL_XCODE" != "$BLUE_EXPECTED_XCODE" ]; then
     echo "Expected Xcode $BLUE_EXPECTED_XCODE; found $BLUE_ACTUAL_XCODE." >&2; exit 1
 fi
