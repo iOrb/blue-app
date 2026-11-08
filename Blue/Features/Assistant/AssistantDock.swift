@@ -12,66 +12,24 @@ struct AssistantDock: View {
     @State private var event: CalendarEvent?
     @State private var deletionAction: (() async throws -> Void)?
     @State private var reviewingDeletion = false
+    @State private var showsResponse = false
+    @State private var matches = AssistantSelection()
     var body: some View {
-        @Bindable var assistant = assistant
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                BlueCharacter(state: assistant.state).frame(width: 46, height: 46).accessibilityHidden(true)
-                HStack(spacing: 4) {
-                    TextField(
-                        l(dictation.recording ? "dictation.listening" : "assistant.placeholder"), text: $assistant.input
-                    )
-                    .focused($focused).submitLabel(.send).onSubmit(submit).accessibilityIdentifier("assistantInput")
-                    QuietButton(
-                        key: dictation.recording ? "dictation.stop" : "dictation.start",
-                        symbol: dictation.recording ? "stop.circle.fill" : "mic"
-                    ) {
-                        if dictation.recording {
-                            dictation.stop()
-                        } else {
-                            focused = false
-                            let prefix = assistant.input
-                            Task {
-                                await dictation.start(language: l.language) {
-                                    assistant.input = prefix.isEmpty ? $0 : prefix + " " + $0
-                                }
-                            }
-                        }
-                    }.accessibilityIdentifier("assistantMicrophone")
-                    if assistant.busy {
-                        QuietButton(key: "cancel", symbol: "stop.circle") { assistant.cancel() }
-                    } else {
-                        QuietButton(key: "assistant.send", symbol: "arrow.up.circle.fill", action: submit).disabled(
-                            assistant.input.isEmpty
-                        ).accessibilityIdentifier("assistantSend")
-                    }
-                }.padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6).background(
-                    .regularMaterial, in: Capsule())
-            }.padding(.horizontal, 18).padding(.bottom, 20)
-            ErrorLine(key: dictation.errorKey).padding(.horizontal, 24)
-            ScrollViewReader { scroll in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        ForEach(
-                            Array(assistant.history.dropLast(assistant.activePrompt == nil ? 1 : 0).enumerated()),
-                            id: \.offset
-                        ) { _, exchange in
-                            Text(exchange.user).foregroundStyle(.secondary).frame(
-                                maxWidth: .infinity, alignment: .trailing)
-                            MarkdownView(text: .constant(exchange.reply))
-                        }
-                        if let question = assistant.activePrompt ?? assistant.history.last?.user {
-                            Text(question).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                        if let result = assistant.result { resultView(result) }
-                        if assistant.busy { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
-                        Color.clear.frame(height: 1).id("latest")
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 30)
-                }.scrollDismissesKeyboard(.interactively)
-                    .onChange(of: assistant.history) { _, _ in scroll.scrollTo("latest", anchor: .bottom) }
+        VStack(spacing: 8) {
+            if showsResponse && !focused {
+                ViewThatFits(in: .vertical) {
+                    response.fixedSize(horizontal: false, vertical: true)
+                    ScrollView { response }.defaultScrollAnchor(.bottom)
+                }
             }
+            if assistant.usesLibrarySearch {
+                Text(l(assistant.availabilityKey)).font(.footnote).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24)
+            }
+            composer
+            if let error = dictation.errorKey { ErrorLine(key: error).padding(.horizontal, 24) }
         }
-
+        .padding(.top, 6).padding(.bottom, 8)
         .blueConfirmation(isPresented: $reviewingDeletion, title: l("delete.confirm")) {
             let action = deletionAction
             deletionAction = nil
@@ -81,7 +39,10 @@ struct AssistantDock: View {
                 }
             }
         }
-        .onAppear { focused = navigation.assistantFocused }
+        .onAppear {
+            showsResponse = assistant.busy
+            focused = navigation.assistantFocused
+        }
         .onDisappear {
             dictation.stop()
             navigation.assistantFocused = false
@@ -94,10 +55,101 @@ struct AssistantDock: View {
             if let event { EventEditor(existing: event, date: event.date) }
         }
     }
+    private var composer: some View {
+        @Bindable var assistant = assistant
+        let searching = assistant.usesLibrarySearch
+        return HStack(spacing: 8) {
+            BlueCharacter(state: assistant.state).frame(width: 40, height: 40).accessibilityHidden(true)
+            HStack(spacing: 4) {
+                TextField(
+                    l(
+                        dictation.recording
+                            ? "dictation.listening" : searching ? "assistant.searchLibrary" : "assistant.placeholder"),
+                    text: $assistant.input
+                )
+                .focused($focused).submitLabel(searching ? .search : .send).onSubmit(submit)
+                .accessibilityIdentifier("assistantInput")
+                QuietButton(
+                    key: dictation.recording ? "dictation.stop" : "dictation.start",
+                    symbol: dictation.recording ? "stop.circle.fill" : "mic"
+                ) {
+                    if dictation.recording {
+                        dictation.stop()
+                    } else {
+                        focused = false
+                        let prefix = assistant.input
+                        Task {
+                            await dictation.start(language: l.language) {
+                                assistant.input = prefix.isEmpty ? $0 : prefix + " " + $0
+                            }
+                        }
+                    }
+                }.accessibilityIdentifier("assistantMicrophone")
+                if assistant.busy {
+                    QuietButton(key: "cancel", symbol: "stop.circle") { assistant.cancel() }
+                } else {
+                    QuietButton(
+                        key: searching ? "assistant.searchLibrary" : "assistant.send",
+                        symbol: searching ? "magnifyingglass" : "arrow.up.circle.fill", action: submit
+                    ).disabled(assistant.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("assistantSend")
+                }
+            }.padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6).background(
+                .regularMaterial, in: Capsule())
+        }.padding(.horizontal, 18)
+    }
+    private var response: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if assistant.usesLibrarySearch {
+                if matches.records.isEmpty && matches.collections.isEmpty && matches.notes.isEmpty
+                    && matches.events.isEmpty
+                {
+                    Text(l("assistant.noResults")).foregroundStyle(.secondary)
+                }
+                ForEach(matches.collections, id: \.self) { collectionLink($0) }
+                records(matches.records, compact: true)
+                notes(matches.notes, compact: true)
+                events(matches.events)
+            } else {
+                ForEach(
+                    Array(assistant.history.dropLast(assistant.activePrompt == nil ? 1 : 0).enumerated()),
+                    id: \.offset
+                ) { _, exchange in
+                    Text(exchange.user).foregroundStyle(.secondary).frame(
+                        maxWidth: .infinity, alignment: .trailing)
+                    MarkdownView(text: .constant(exchange.reply))
+                }
+                if let question = assistant.activePrompt ?? assistant.history.last?.user {
+                    Text(question).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                if let result = assistant.result { resultView(result) }
+                if assistant.busy {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(l("character.\(assistant.state.rawValue)")).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.vertical, 6)
+    }
     private func submit() {
+        let query = assistant.input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !assistant.busy else { return }
         dictation.stop()
         focused = false
-        assistant.submit(store: store, alarms: alarms, language: l.language)
+        showsResponse = true
+        if assistant.usesLibrarySearch {
+            func contains(_ value: String) -> Bool { value.localizedStandardContains(query) }
+            matches = AssistantSelection(
+                records: store.state.records.lazy.filter { contains($0.title) }.prefix(8).map(\.id),
+                notes: store.state.notes.lazy.filter { contains(l.text($0.title)) || contains(l.text($0.markdown)) }
+                    .prefix(5).map(\.id),
+                collections: store.state.collections.lazy.filter { contains(l.text($0.title)) }.prefix(5).map(\.id),
+                events: (store.state.events ?? []).lazy.filter { contains($0.title) }.prefix(5).map(\.id))
+            assistant.input = ""
+        } else {
+            assistant.submit(store: store, alarms: alarms, language: l.language)
+        }
     }
     private func open(_ route: Route) {
         navigation.open(route)
@@ -164,7 +216,7 @@ struct AssistantDock: View {
             }
         }
     }
-    @ViewBuilder private func records(_ ids: [UUID], fields: [String] = []) -> some View {
+    @ViewBuilder private func records(_ ids: [UUID], fields: [String] = [], compact: Bool = false) -> some View {
         ForEach(ids, id: \.self) { id in
             if let record = store.record(id), let collection = store.collection(record.collectionID) {
                 Button {
@@ -174,21 +226,23 @@ struct AssistantDock: View {
                     Text(record.title).font(.title3.weight(.semibold)).frame(
                         maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }.buttonStyle(.plain).accessibilityIdentifier("result-\(record.title)")
-                let displayed = Collection(
-                    id: collection.id, title: collection.title,
-                    fields: fields.isEmpty ? collection.fields : collection.fields.filter { fields.contains($0.id) })
-                RecordIndicators(
-                    record: record, collection: displayed, interactive: true,
-                    includeFavorite: fields.isEmpty || fields.contains("__favorite")
-                        || collection.fields.contains { $0.kind == .favorite && fields.contains($0.id) })
-                if (fields.isEmpty || fields.contains("markdown")) && !l.text(record.markdown).isEmpty {
-                    MarkdownView(text: .constant(l.text(record.markdown)))
+                if !compact {
+                    let displayed = Collection(
+                        id: collection.id, title: collection.title,
+                        fields: fields.isEmpty ? collection.fields : collection.fields.filter { fields.contains($0.id) }
+                    )
+                    RecordIndicators(
+                        record: record, collection: displayed, interactive: true,
+                        includeFavorite: fields.isEmpty || fields.contains("__favorite")
+                            || collection.fields.contains { $0.kind == .favorite && fields.contains($0.id) })
+                    if (fields.isEmpty || fields.contains("markdown")) && !l.text(record.markdown).isEmpty {
+                        MarkdownView(text: .constant(l.text(record.markdown)))
+                    }
                 }
-
             }
         }
     }
-    @ViewBuilder private func notes(_ ids: [UUID]) -> some View {
+    @ViewBuilder private func notes(_ ids: [UUID], compact: Bool = false) -> some View {
         ForEach(ids, id: \.self) { id in
             if let note = store.state.notes.first(where: { $0.id == id }) {
                 Button {
@@ -197,7 +251,7 @@ struct AssistantDock: View {
                 } label: {
                     Text(l.text(note.title)).font(.title3.weight(.semibold)).frame(minHeight: 44)
                 }.buttonStyle(.plain)
-                Text(l.text(note.markdown)).frame(maxWidth: .infinity, alignment: .leading)
+                if !compact { Text(l.text(note.markdown)).frame(maxWidth: .infinity, alignment: .leading) }
             }
         }
     }

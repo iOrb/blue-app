@@ -1598,6 +1598,74 @@
         }
       }
     },
+    "assistant.searchLibrary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search in Blue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar en Blue"
+          }
+        }
+      }
+    },
+    "settings.import": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import collections and notes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar colecciones y notas"
+          }
+        }
+      }
+    },
+    "settings.imported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Library copy imported."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia importada."
+          }
+        }
+      }
+    },
+    "settings.importFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not import this Blue library copy."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo importar esta copia de Blue."
+          }
+        }
+      }
+    },
     "assistant.placeholder": {
       "extractionState": "manual",
       "localizations": {
@@ -1689,13 +1757,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This device does not support the local model"
+            "value": "This iPhone does not support Apple Intelligence."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Este dispositivo no admite el modelo local"
+            "value": "Este iPhone no admite Apple Intelligence."
           }
         }
       }

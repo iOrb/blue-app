@@ -148,11 +148,16 @@ final class BlueUITests: XCTestCase {
         blue.tap()
         let input = app.textFields["assistantInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
-        input.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(input.frame.maxY, keyboard.frame.minY + 2)
+        // XCTest reports the key area below the system suggestion strip.
+        XCTAssertLessThan(keyboard.frame.minY - input.frame.maxY, 80)
+        screenshot(app, "assistant-keyboard")
         input.typeText("What rating did I give Interstellar?\n")
         XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Close"].exists)
-        XCTAssertLessThan(input.frame.midY, app.buttons["result-Interstellar"].frame.midY)
+        XCTAssertGreaterThan(input.frame.midY, app.buttons["result-Interstellar"].frame.midY)
         XCTAssertFalse(app.buttons["scope-notes"].exists)
         screenshot(app, "assistant-result-sheet")
         dismissSheet(app)
@@ -164,6 +169,26 @@ final class BlueUITests: XCTestCase {
         dismissSheet(app)
         app.buttons["askBlue"].tap()
         XCTAssertEqual(input.value as? String, "Unsent draft")
+    }
+    @MainActor func testBlueSearchWithoutLocalModel() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest", "--uitest-reset", "--test-library-search"]
+        app.launch()
+        XCTAssertTrue(app.buttons["askBlue"].waitForExistence(timeout: 20))
+        spanish(app)
+        app.buttons["askBlue"].tap()
+        let input = app.textFields["assistantInput"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        XCTAssertEqual(input.placeholderValue, "Buscar en Blue")
+        XCTAssertTrue(app.staticTexts["Este iPhone no admite Apple Intelligence."].exists)
+        screenshot(app, "blue-search-keyboard-spanish")
+        input.typeText("interstellar\n")
+        let result = app.buttons["result-Interstellar"]
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(input.frame.midY, result.frame.midY)
+        screenshot(app, "blue-search-result-spanish")
+        result.tap()
+        XCTAssertTrue(app.scrollViews["recordEditor"].waitForExistence(timeout: 5))
     }
     @MainActor func testSpanishOverviewAndTouchTargets() {
         let app = launch()

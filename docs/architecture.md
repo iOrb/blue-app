@@ -28,6 +28,10 @@ CalendarEvent persists ordinary timed/all-day plans with a color and revision. I
 
 Features mutate through LibraryStore. The native root owns navigation, assistant and alarm services. Collection back/options and detail sheet controls stay fixed while their bodies scroll. The root presents three sections; the dock hides beneath presentations and inside collections only Blue remains. Notes use plain text; the Codable markdown key is retained for data compatibility. Valid inline edits autosave. Destructive actions use a centered modal and revalidate revisions before committing. The web mirror uses React and browser-local versioned JSON, with validation before storage/state publication. A one-time authenticated private import preserves the owner's existing native lists; private snapshots and credentials never enter Git or the deployment archive.
 
+The native Blue composer can search saved titles and note text without a model. This local search reads library items and opens their editors. Speech permission completion can arrive off the main actor. Dictation handles it in a Sendable callback and returns to the main actor to start capture. The audio tap runs on the audio queue.
+
+Native Settings imports collections and notes from a version 2 export in a single store transaction. Existing collections, records and notes keep their values. The same importer supports an explicit DEBUG device restore from an app-local file. Personal exports are separate from app source and builds.
+
 The web Worker authenticates the owner and proxies bounded requests to the token-protected Mac bridge. The bridge uses the production store/tools against an ephemeral library snapshot. The client rejects intervening edits before applying a response. Browser import markers are preserved; calendar events now round-trip through native inference. Browser and native stores do not continuously synchronize.
 
 Device/Release binaries exclude the DEBUG loopback bridge. Signing is local with a free Personal Team; there is no TestFlight or paid distribution pipeline.

@@ -307,8 +307,24 @@ final class AssistantService {
     func restoreConversation(_ exchanges: [AssistantExchange]) { history = AssistantExchange.bounded(exchanges) }
     let testMode: Bool
     init(testMode: Bool = false) { self.testMode = testMode }
+    #if DEBUG
+        private let testingLibrarySearch = ProcessInfo.processInfo.arguments.contains("--test-library-search")
+    #endif
+    var usesLibrarySearch: Bool {
+        if testMode { return false }
+        #if DEBUG
+            if testingLibrarySearch { return true }
+        #endif
+        #if DEBUG && targetEnvironment(simulator)
+            if SimulatorModelBridge.isConfigured { return false }
+        #endif
+        return !SystemLanguageModel.default.isAvailable
+    }
     var availabilityKey: String {
         if testMode { return "assistant.testMode" }
+        #if DEBUG
+            if testingLibrarySearch { return "assistant.deviceNotEligible" }
+        #endif
         #if DEBUG && targetEnvironment(simulator)
             if SimulatorModelBridge.isConfigured { return "assistant.macBridge" }
         #endif

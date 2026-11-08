@@ -56,7 +56,15 @@ struct BlueApp: App {
                     return
                 }
             #endif
-            store = try LibraryStore(seed: false)
+            let library = try LibraryStore(seed: false)
+            #if DEBUG && !targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("--restore-local-library") {
+                    let backup = URL.temporaryDirectory.appending(path: "Blue-library-import.json")
+                    try library.importBackup(Data(contentsOf: backup, options: .mappedIfSafe))
+                    try? FileManager.default.removeItem(at: backup)
+                }
+            #endif
+            store = library
         } catch { startupFailed = true }
     }
 }
@@ -118,7 +126,7 @@ struct BlueRoot: View {
             default: EmptyView()
             }
         }
-        .blueSheet(isPresented: $navigation.assistantExpanded, title: "") { AssistantDock() }
+        .blueSheet(isPresented: $navigation.assistantExpanded, title: "", fitsContent: true) { AssistantDock() }
         .environment(navigation).environment(assistant).environment(alarms)
         .onChange(of: navigation.tab) { _, _ in
             navigation.assistantFocused = false
@@ -170,8 +178,7 @@ struct BlueNavigation: View {
                     tabButton("calendar", key: "tab.calendar", symbol: "calendar")
                 }
                 .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(.regularMaterial, in: Capsule()).overlay(Capsule().stroke(.primary.opacity(0.05)))
-                .shadow(color: .black.opacity(0.06), radius: 20, y: 6)
+                .glassEffect(.regular, in: Capsule())
             } else {
                 Spacer()
             }
@@ -184,9 +191,7 @@ struct BlueNavigation: View {
                 }
             } label: {
                 BlueCharacter(state: assistant.state).frame(width: 58, height: 58)
-                    .background(Color.blue.opacity(0.09), in: Circle())
-                    .overlay(Circle().stroke(Color.blue.opacity(0.16)))
-                    .shadow(color: .blue.opacity(0.16), radius: 12, y: 4)
+                    .glassEffect(.regular.tint(Color.blue.opacity(0.12)).interactive(), in: Circle())
             }
             .buttonStyle(.plain).accessibilityLabel(l("library.askBlue")).accessibilityIdentifier("askBlue")
         }
@@ -205,7 +210,9 @@ struct BlueNavigation: View {
                     .minimumScaleFactor(0.65)
             }.frame(maxWidth: .infinity, minHeight: 52)
                 .foregroundStyle(navigation.scope == scope ? Color.primary : Color.secondary)
+                .background(navigation.scope == scope ? Color.primary.opacity(0.08) : .clear, in: Capsule())
         }.buttonStyle(.plain).frame(maxWidth: .infinity, minHeight: 52).contentShape(Rectangle())
             .accessibilityIdentifier("scope-\(scope)")
+            .accessibilityAddTraits(navigation.scope == scope ? .isSelected : [])
     }
 }

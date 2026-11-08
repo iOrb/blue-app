@@ -15,11 +15,13 @@ No `.p12`, `.p8`, App Store profile, App Store app record, API key or GitHub sec
 
 Free Personal Team provisioning is temporary. Apple states that App IDs, registered test devices and provisioning profiles expire after seven days; you may need to reconnect and run the app again from Xcode. Keep the bundle ID unchanged and do not delete Blue to refresh signing. Export a backup from Blue Settings before any reinstall that could remove app data.
 
-iOS 27 enables wireless first pairing in Device Hub, but it does not add Apple Intelligence to iPhone 13 mini. Blue's manual collections, notes and calendar remain usable on that phone; the native on-device assistant needs supported hardware. See [Apple Intelligence requirements](https://support.apple.com/en-us/121115).
+iOS 27 enables wireless first pairing in Device Hub. On iPhone 13 mini, Blue opens local library search because the device lacks Apple Intelligence. Manual collections, notes and calendar work on that phone. See [Apple Intelligence requirements](https://support.apple.com/en-us/121115).
+
+To bring a previously exported collection or note to this device, open Blue Settings and choose **Import collections and notes**. Choose a native Blue version 2 JSON export in Files. Existing collections and notes keep their local edits.
 
 ## Device checks
 
-- Confirm English/Spanish switching while editing a note and with a Blue-applied collection query active. Check collection back/options, ascending/descending sorting, plain-text notes, centered deletion modal, the separate Blue button, top composer, outside-tap dismissal and preserved drafts at the physical keyboard size.
+- Confirm English/Spanish switching while editing a note and with a Blue-applied collection query active. Check collection back/options, ascending/descending sorting, plain-text notes, centered deletion modal, Liquid Glass navigation, the composer immediately above the keyboard, outside-tap dismissal and preserved drafts at the physical keyboard size.
 - Tap a rating, scroll the number picker, dismiss it, terminate Blue and confirm persistence. Create a calendar event through + and check the day sheet after relaunch.
 - On an Apple Intelligence-compatible iPhone with its local model ready, enable Airplane Mode and ask Blue to read Interstellar's rating, then change it. Verify the actual row and relaunch. Also say hello with that item selected, propose a note rewrite without saving, then explicitly accept the proposal. Manual functionality works on iPhones without that model.
 - Create an alarm a few minutes ahead, grant the AlarmKit permission, lock the phone, and verify delivery. Check silent/Focus modes, permission denial, disable/delete, recurrence and time-zone changes. Personal Team installation itself does not establish these behaviors.

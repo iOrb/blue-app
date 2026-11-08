@@ -3,6 +3,7 @@ import SwiftUI
 /// A fixed heading above scrolling content; the scrim and drag handle dismiss it.
 struct BlueSheet<Content: View>: View {
     let title: String
+    let fitsContent: Bool
     var dismiss: () -> Void
     @ViewBuilder var content: () -> Content
     @State private var offset: CGFloat = 0
@@ -11,7 +12,7 @@ struct BlueSheet<Content: View>: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                Color.black.opacity(0.18).ignoresSafeArea().onTapGesture(perform: dismiss)
+                Color.black.opacity(0.32).ignoresSafeArea().onTapGesture(perform: dismiss)
                     .accessibilityIdentifier("sheetBackdrop")
                 VStack(spacing: 0) {
                     VStack(spacing: 12) {
@@ -29,13 +30,16 @@ struct BlueSheet<Content: View>: View {
                                     }
                                     offset = 0
                                 })
-                    content().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    content().frame(maxWidth: .infinity, maxHeight: fitsContent ? nil : .infinity, alignment: .top)
                 }
-                .frame(maxWidth: 760).frame(height: geometry.size.height * 0.86)
+                .frame(maxWidth: 760).frame(height: fitsContent ? nil : geometry.size.height * 0.86)
                 .background {
                     UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                        .fill(Color(uiColor: .systemBackground)).ignoresSafeArea(.container, edges: .bottom)
+                        .fill(Color(uiColor: .systemBackground))
+                        .shadow(color: .black.opacity(0.22), radius: 20, y: -5)
+                        .ignoresSafeArea(.container, edges: .bottom)
                 }
+                .padding(.top, fitsContent ? geometry.size.height * 0.18 : 0)
                 .offset(y: offset)
                 .accessibilityAction(.escape, dismiss)
             }
@@ -47,12 +51,14 @@ struct BlueSheet<Content: View>: View {
 
 extension View {
     func blueSheet<Content: View>(
-        isPresented: Binding<Bool>, title: String, onDismiss: (() -> Void)? = nil,
+        isPresented: Binding<Bool>, title: String, fitsContent: Bool = false, onDismiss: (() -> Void)? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         fullScreenCover(isPresented: isPresented, onDismiss: onDismiss) {
-            BlueSheet(title: title, dismiss: { isPresented.wrappedValue = false }, content: content)
-                .presentationBackground(.clear)
+            BlueSheet(
+                title: title, fitsContent: fitsContent, dismiss: { isPresented.wrappedValue = false }, content: content
+            )
+            .presentationBackground(.clear)
         }
     }
 }

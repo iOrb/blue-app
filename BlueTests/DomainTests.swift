@@ -61,6 +61,32 @@ struct DomainTests {
 
 @MainActor
 struct PersistenceTests {
+    @Test func importingCollectionsPreservesLocalEditsAndRejectsInvalidRecords() throws {
+        let source = try LibraryStore(inMemory: true, seed: false)
+        let target = try LibraryStore(inMemory: true, seed: false)
+        let id = try source.createCollection(title: "Films", fields: [])
+        var movie = Record(collectionID: id, title: "Interstellar")
+        try source.saveRecord(movie, expectedRevision: nil)
+        try source.saveNote(
+            Note(title: .user("My note"), markdown: .user("First line\nSecond line")), expectedRevision: nil)
+        let backup = try source.export()
+        try target.importBackup(backup)
+        #expect(target.state.notes.count == 1)
+        #expect(target.record(movie.id)?.title == "Interstellar")
+        movie.title = "My edit"
+        try target.saveRecord(movie, expectedRevision: target.record(movie.id)?.revision)
+        try target.importBackup(backup)
+        #expect(target.state.collections.count == 1)
+        #expect(target.state.notes.count == 1)
+        #expect(target.record(movie.id)?.title == "My edit")
+
+        let newID = try source.createCollection(title: "Invalid record collection", fields: [])
+        try source.update { $0.records.append(Record(collectionID: newID, title: "")) }
+        let invalidBackup = try source.export()
+        #expect(throws: BlueError.emptyTitle) { try target.importBackup(invalidBackup) }
+        #expect(target.collection(newID) == nil)
+        #expect(target.record(movie.id)?.title == "My edit")
+    }
     @Test func recordEditSurvivesRelaunchAndDoesNotReseed() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

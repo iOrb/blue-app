@@ -31,6 +31,8 @@ struct SettingsView: View {
     @Environment(AssistantService.self) private var assistant
     @Environment(\.dismiss) private var dismiss
     @State private var exporting = false
+    @State private var importing = false
+    @State private var imported = false
     @State private var document = JSONExport(data: Data())
     @State private var error: String?
     var body: some View {
@@ -61,6 +63,7 @@ struct SettingsView: View {
                 Text(l("settings.privacy")).font(.footnote).foregroundStyle(.secondary)
             }
             Section {
+                Button(l("settings.import")) { importing = true }
                 Button(l("settings.export")) {
                     do {
                         document = JSONExport(data: try store.export())
@@ -68,12 +71,24 @@ struct SettingsView: View {
                     } catch { self.error = BlueError.saveFailed.key }
                 }
 
+                if imported { Text(l("settings.imported")).foregroundStyle(.secondary) }
                 ErrorLine(key: error)
             }
             Section { Text(l("settings.systemLanguage")).font(.footnote).foregroundStyle(.secondary) }
         }
         .listStyle(.plain)
         .navigationTitle(l("settings.title")).navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            imported = false
+            do {
+                let url = try result.get()
+                let accessing = url.startAccessingSecurityScopedResource()
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                try store.importBackup(Data(contentsOf: url, options: .mappedIfSafe))
+                error = nil
+                imported = true
+            } catch { self.error = "settings.importFailed" }
+        }
         .fileExporter(
             isPresented: $exporting, document: document, contentType: .json, defaultFilename: "Blue-export-v2"
         ) { result in

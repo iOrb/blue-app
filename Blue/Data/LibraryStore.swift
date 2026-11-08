@@ -304,4 +304,51 @@ final class LibraryStore {
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(state)
     }
+
+    /// Add collections and notes from a version 2 export in one save. Keep local edits and alarm state.
+    func importBackup(_ data: Data) throws {
+        guard data.count <= 10_000_000 else { throw BlueError.invalidValue }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(LibraryState.self, from: data)
+        guard backup.formatVersion == 2, backup.folders.isEmpty,
+            Set(backup.collections.map(\.id)).count == backup.collections.count,
+            Set(backup.records.map(\.id)).count == backup.records.count,
+            Set(backup.notes.map(\.id)).count == backup.notes.count
+        else { throw BlueError.invalidValue }
+
+        let currentCollections = Set(state.collections.map(\.id))
+        let currentRecords = Set(state.records.map(\.id))
+        let currentNotes = Set(state.notes.map(\.id))
+        let collections = backup.collections.filter { !currentCollections.contains($0.id) }
+        let byID = Dictionary(uniqueKeysWithValues: collections.map { ($0.id, $0) })
+        let records = backup.records.filter { byID[$0.collectionID] != nil && !currentRecords.contains($0.id) }
+        let notes = backup.notes.filter { !currentNotes.contains($0.id) }
+        for collection in collections {
+            guard collection.folderID == nil else { throw BlueError.invalidValue }
+            try Validation.collection(collection)
+        }
+        for record in records {
+            try Validation.title(record.title)
+            for (id, value) in record.values {
+                guard let field = byID[record.collectionID]?.fields.first(where: { $0.id == id }) else {
+                    throw BlueError.invalidValue
+                }
+                try Validation.field(field, value: value)
+            }
+        }
+        for note in notes {
+            guard note.folderID == nil, note.markdown.english.count <= 20_000, note.markdown.spanish.count <= 20_000
+            else { throw BlueError.invalidValue }
+            if note.title.key == nil {
+                try Validation.title(note.title.english)
+                try Validation.title(note.title.spanish)
+            }
+        }
+        try update { state in
+            state.collections += collections
+            state.records += records
+            state.notes += notes
+        }
+    }
 }
