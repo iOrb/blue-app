@@ -70,46 +70,46 @@ struct CollectionView: View {
                 let records =
                     snapshot.records.count > 500
                     ? largeResults : query.apply(to: snapshot.records, fields: collection.fields, locale: l.locale)
-                List {
-                    if let notice = navigation.noticeKey {
-                        HStack {
-                            Text(l(notice)).font(.caption).foregroundStyle(.secondary)
-                            Spacer()
-                            QuietButton(key: "close", symbol: "xmark") { navigation.noticeKey = nil }
-                        }
-                    }
-                    if query.filters.contains(where: { $0.flag == nil }) {
-                        activeFilters(collection).listRowSeparator(.hidden)
-                    }
-                    ForEach(records) { record in
-                        VStack(alignment: .leading, spacing: 0) {
-                            Button {
-                                navigation.path.append(.record(record.id))
-                            } label: {
-                                RecordRow(
-                                    record: record, collection: collection, directActions: false,
-                                    showsFavoriteIndicator: false)
-                            }
-                            .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("row-\(record.title)")
-                            RecordIndicators(record: record, collection: collection, interactive: true).padding(
-                                .bottom, 9)
-
-                        }
-                        .id(record.id)
-                        .listRowBackground(
-                            navigation.highlightedRecord == record.id ? Color.primary.opacity(0.07) : Color.clear)
-                    }
-                    if records.isEmpty {
-                        ContentUnavailableView(
-                            l(query.filters.isEmpty ? "collection.empty" : "filters.noResults"),
-                            systemImage: "list.bullet", description: Text(l("collection.emptyHint"))
-                        )
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                .listStyle(.plain)
-                .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
                     controls(collection).padding(.horizontal, 16).padding(.vertical, 8).background(.background)
+                    List {
+                        if let notice = navigation.noticeKey {
+                            HStack {
+                                Text(l(notice)).font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                                QuietButton(key: "close", symbol: "xmark") { navigation.noticeKey = nil }
+                            }
+                        }
+                        if query.filters.contains(where: { $0.flag == nil }) {
+                            activeFilters(collection).listRowSeparator(.hidden)
+                        }
+                        ForEach(records) { record in
+                            VStack(alignment: .leading, spacing: 0) {
+                                Button {
+                                    navigation.path.append(.record(record.id))
+                                } label: {
+                                    RecordRow(
+                                        record: record, collection: collection, directActions: false,
+                                        showsFavoriteIndicator: false)
+                                }
+                                .buttonStyle(.plain).frame(minHeight: 44).accessibilityIdentifier("row-\(record.title)")
+                                RecordIndicators(record: record, collection: collection, interactive: true).padding(
+                                    .bottom, 9)
+
+                            }
+                            .id(record.id)
+                            .listRowBackground(
+                                navigation.highlightedRecord == record.id ? Color.primary.opacity(0.07) : Color.clear)
+                        }
+                        if records.isEmpty {
+                            ContentUnavailableView(
+                                l(query.filters.isEmpty ? "collection.empty" : "filters.noResults"),
+                                systemImage: "list.bullet", description: Text(l("collection.emptyHint"))
+                            )
+                            .listRowSeparator(.hidden)
+                        }
+                    }
+                    .listStyle(.plain)
                 }
                 .task(id: snapshot) {
                     guard snapshot.records.count > 500 else { return }

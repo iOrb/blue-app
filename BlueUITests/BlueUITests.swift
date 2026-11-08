@@ -24,9 +24,8 @@ final class BlueUITests: XCTestCase {
         app.buttons["assistantSend"].tap()
     }
     @MainActor private func switchToSpanish(_ app: XCUIApplication) {
-        if app.buttons["collectionOptions"].exists && app.buttons["collectionOptions"].isHittable {
-            app.buttons["collectionOptions"].tap()
-        }
+        let options = app.descendants(matching: .any).matching(identifier: "collectionOptions").firstMatch
+        if options.exists && options.isHittable { options.tap() }
         let settings = app.buttons.matching(identifier: "settingsButton").firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
@@ -214,12 +213,17 @@ final class BlueUITests: XCTestCase {
         XCTAssertEqual(favorite.value as? String, "Yes")
         input.tap()
         input.typeText("Keep this draft")
+        // iOS 27.0 hides the tab bar behind the software keyboard. Tap a visible
+        // filter control first; dismissal must preserve the input draft and toggle it.
+        app.buttons["quickFilter-__favorite"].tap()
+        XCTAssertEqual(app.buttons["quickFilter-__favorite"].value as? String, "Yes")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         app.tabBars.buttons["Calendar"].tap()
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
         app.tabBars.buttons["Notes"].tap()
         XCTAssertEqual(app.textFields["assistantInput"].value as? String, "Keep this draft")
-        app.navigationBars.firstMatch.tap()
+        app.buttons["quickFilter-__favorite"].tap()
         XCTAssertTrue(app.buttons["assistantMicrophone"].exists)
         screenshot(app, "chat-dismiss-and-favorite")
         app.buttons["BackButton"].tap()

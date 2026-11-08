@@ -107,3 +107,11 @@ Xcode 27.2 intermittently reports a SwiftUI “Invalid frame dimension” runtim
 - VoiceOver reading order and speech, keyboard ergonomics, and sustained battery/thermal performance.
 
 No alarm delivery or on-device model success is inferred from a fake scheduler or deterministic UI assistant. See [architecture](architecture.md) for persistence and scaling tradeoffs and [the workflow](../.github/workflows/checks.yml) for reproducible CI. CI uses the published `xcode-27` macOS runner with Xcode 27.1 and iOS 27.0, explicitly checked before testing; local results use the configuration above.
+
+## Follow-up: collection controls and CI portability (2026-11-08)
+
+The first complete GitHub run (`42481055755`) exposed inaccessible collection controls after assistant scrolling and a UI test that tried to tap the tab bar while the software keyboard covered it. Collection controls now occupy a separate stack above the list, keeping their hit regions outside the scrolling surface. The UI test uses a visible favorite-filter control to verify that one outside tap both acts and dismisses chat; it does not tap the navigation title, which can focus the system search field.
+
+Local verification of the changed layout passed the exact-record edit/language/relaunch flow, filter persistence, and accessibility audit (`Tests-20261108-141010.xcresult`; its fourth test still had the navigation-title issue). After correcting that test, the chat/Enter/outside-tap/favorites flow passed in `Tests-20261108-141540.xcresult`. Release and unsigned iPhone SDK builds also passed. These checks used the separate `Blue Verification` simulator. The main simulator library was restored from its existing backup after an initially misdirected test launch was stopped.
+
+The native CI workflow ignores web-only source and preview-documentation changes; native and shared changes still run its complete suite. The Safari preview has separate verification described in `docs/web-preview.md`.
