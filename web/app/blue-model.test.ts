@@ -156,3 +156,154 @@ test("honors model date filters and allows only web links", () => {
     "https://en.wikipedia.org/wiki/Interstellar_(film)",
   );
 });
+
+import { importLibrary } from "./blue-import.ts";
+import { agenda, dateKey, monthDays } from "./blue-calendar-model.ts";
+test("migration combines bilingual collections, preserves local values and custom icons, and runs only once", () => {
+  const browser = {
+    ...emptyLibrary(),
+    collections: [collection],
+    records: [record("Interstellar", 10)],
+  };
+  const importedCollection = {
+    ...structuredClone(collection),
+    id: uid(),
+    title: { key: "template.movies", english: "", spanish: "" },
+    symbol: "film",
+  };
+  const importedRecord = {
+    ...record("Interstellar", 8),
+    collectionID: importedCollection.id,
+    values: { rating: { number: { _0: 8 } }, bass: { flag: { _0: true } } },
+  };
+  const incoming = {
+    ...emptyLibrary(),
+    collections: [importedCollection],
+    records: [
+      importedRecord,
+      { ...record("Arrival", 9), collectionID: importedCollection.id },
+    ],
+  };
+  const next = importLibrary(browser, incoming, "native-test");
+  assert.equal(next.collections.length, 1);
+  assert.equal(next.collections[0].symbol, "🚬");
+  assert.equal(next.records.length, 2);
+  assert.equal(next.records[0].values.rating?.number?._0, 10);
+  assert.equal(next.records[0].values.bass?.flag?._0, true);
+  assert.equal(browser.records[0].values.bass, undefined);
+  next.records = [];
+  assert.equal(importLibrary(next, incoming, "native-test"), next);
+  assert.equal(
+    next.records.length,
+    0,
+    "reloading must not restore deleted items",
+  );
+});
+test("migration reconciles status option IDs without losing existing meanings", () => {
+  const c = {
+    ...structuredClone(collection),
+    fields: [
+      {
+        id: "status",
+        label: userText("Status"),
+        kind: "status" as const,
+        options: [{ id: "watched", label: userText("Watched") }],
+        showInRow: true,
+      },
+    ],
+  };
+  const native = {
+    ...structuredClone(c),
+    id: uid(),
+    fields: [
+      {
+        ...c.fields[0],
+        options: [
+          { id: "done", label: userText("Watched") },
+          { id: "watched", label: userText("Planned") },
+        ],
+      },
+    ],
+  };
+  const incoming = {
+    ...emptyLibrary(),
+    collections: [native],
+    records: [
+      {
+        ...record("One"),
+        collectionID: native.id,
+        values: { status: { option: { _0: "done" } } },
+      },
+      {
+        ...record("Two"),
+        collectionID: native.id,
+        values: { status: { option: { _0: "watched" } } },
+      },
+    ],
+  };
+  const result = importLibrary(
+    { ...emptyLibrary(), collections: [c] },
+    incoming,
+    "native-status",
+  );
+  assert.equal(validLibrary(result), true);
+  assert.equal(result.records[0].values.status.option?._0, "watched");
+  assert.equal(result.records[1].values.status.option?._0, "watched_import");
+});
+test("calendar persists validated events and projects collection date fields", () => {
+  const date = new Date(2026, 10, 8, 9, 30);
+  const seconds = date.getTime() / 1000 - 978307200;
+  const library = {
+    ...emptyLibrary(),
+    collections: [collection],
+    records: [
+      { ...record("Release"), values: { year: { date: { _0: seconds } } } },
+    ],
+    events: [
+      {
+        id: uid(),
+        title: "Coffee",
+        date: seconds,
+        day: "2026-11-08",
+        allDay: false,
+        color: "blue",
+        revision: 0,
+      },
+      {
+        id: uid(),
+        title: "Birthday",
+        date: seconds,
+        day: "2026-11-09",
+        allDay: true,
+        color: "purple",
+        revision: 0,
+      },
+    ],
+  };
+  assert.equal(validLibrary(JSON.parse(JSON.stringify(library))), true);
+  assert.deepEqual(
+    agenda(library, "2026-11-08", "es").map((e) => e.title),
+    ["Release", "Coffee"],
+  );
+  assert.deepEqual(
+    agenda(library, "2026-11-09", "es").map((e) => e.title),
+    ["Birthday"],
+  );
+  assert.equal(agenda(library, "2026-11-09", "es")[0].allDay, true);
+  assert.equal(
+    validLibrary({ ...library, events: [{ ...library.events[0], date: NaN }] }),
+    false,
+  );
+  assert.equal(
+    validLibrary({
+      ...library,
+      events: [{ ...library.events[1], day: "2026-02-31" }],
+    }),
+    false,
+  );
+  const days = monthDays(new Date(2026, 10, 1), "es");
+  assert.equal(days.length, 42);
+  assert.equal(days[0].getDay(), 1);
+  assert.equal(dateKey(days.at(-1)!), "2026-12-06");
+  assert.equal(new Set(days.map(dateKey)).size, 42);
+});

@@ -58,6 +58,12 @@ export async function POST(request: Request) {
     };
     if (!validLibrary(result.library) || !result.result)
       throw new Error("invalid");
+    // Native inference does not own web-only calendar or import metadata.
+    result.library = {
+      ...result.library,
+      events: body.library.events,
+      imports: body.library.imports,
+    };
     return Response.json(result, { headers });
   } catch {
     return Response.json(

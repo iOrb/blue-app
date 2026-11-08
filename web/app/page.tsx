@@ -4,6 +4,8 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowLeft,
+  CalendarDays,
+  LayoutGrid,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -55,6 +57,8 @@ import {
   ItemEditor,
   IndicatorEditor,
 } from "./blue-editors";
+import { BlueCalendar } from "./blue-calendar";
+import { importLibrary } from "./blue-import";
 import strings from "./native-strings.json";
 const STORE = "blue.web.library.v2";
 const baseQuery = (): Query => ({
@@ -63,7 +67,8 @@ const baseQuery = (): Query => ({
   filters: [],
 });
 type Route =
-  { type: "library" } | { type: "collection" | "item" | "note"; id: string };
+  | { type: "library" | "calendar" }
+  | { type: "collection" | "item" | "note"; id: string };
 type Editing =
   | { type: "collection"; value?: Collection }
   | { type: "note"; value?: Note }
@@ -99,6 +104,7 @@ export default function Blue() {
   const current = useRef(library);
   const [ready, setReady] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
+  const storageReadable = useRef(true);
   const [route, setRoute] = useState<Route>({ type: "library" });
   const [scope, setScope] = useState<"all" | "notes" | "collections">("all");
   const [starOnly, setStarOnly] = useState(false);
@@ -131,15 +137,18 @@ export default function Blue() {
         if (validLibrary(parsed)) {
           current.current = parsed;
           setLibrary(parsed);
-        } else
+        } else {
+          storageReadable.current = false;
           setNotice(
             "The saved library could not be read. Export or restore your backup. / No se pudo leer la biblioteca.",
           );
+        }
       }
       setPrompt(localStorage.getItem("blue.web.prompt") || "");
       const lang = localStorage.getItem("blue.web.language");
       if (lang === "es" || lang === "en") setLanguage(lang);
     } catch {
+      storageReadable.current = false;
       setNotice(
         "Browser storage is unavailable. / El almacenamiento de Safari no está disponible.",
       );
@@ -153,6 +162,43 @@ export default function Blue() {
     );
     return () => recognition.current?.stop();
   }, []);
+  useEffect(() => {
+    if (!ready || !storageReadable.current) return;
+    const abort = new AbortController();
+    fetch("/api/library-import", { method: "POST", signal: abort.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("import");
+        return response.json() as Promise<{
+          library: Library;
+          importID: string;
+        }>;
+      })
+      .then((data) => {
+        if (abort.signal.aborted) return;
+        const next = importLibrary(
+          current.current,
+          data.library,
+          data.importID,
+        );
+        if (next !== current.current) {
+          // Write the merge and marker atomically before showing it. No undo can reseed deleted data.
+          localStorage.setItem(STORE, JSON.stringify(next));
+          current.current = next;
+          setLibrary(next);
+          setHistory([]);
+        }
+      })
+      .catch(() => {
+        if (!abort.signal.aborted)
+          setNotice(
+            t(
+              "Your lists could not be loaded. Reload to retry.",
+              "No se pudieron cargar tus listas. Recarga para reintentarlo.",
+            ),
+          );
+      });
+    return () => abort.abort();
+  }, [ready]);
   useEffect(() => {
     document.documentElement.lang = language;
     if (ready)
@@ -422,11 +468,7 @@ export default function Blue() {
         <p>
           {text(n.markdown, language)
             .replace(/[#*`>]/g, "")
-            .slice(0, 160) ||
-            t(
-              "A little space for your thoughts.",
-              "Un espacio para tus ideas.",
-            )}
+            .slice(0, 80)}
         </p>
       </button>
       <Indicator
@@ -712,70 +754,117 @@ export default function Blue() {
             </button>
           </div>
         )}
+        {ready && (
+          <nav className="app-navigation" aria-label={t("Views", "Vistas")}>
+            {(["all", "collections", "notes", "calendar"] as const).map(
+              (view) => {
+                const label =
+                  view === "all"
+                    ? t("Library", "Biblioteca")
+                    : view === "collections"
+                      ? t("Collections", "Colecciones")
+                      : view === "notes"
+                        ? t("Notes", "Notas")
+                        : t("Calendar", "Calendario");
+                const selected =
+                  view === "calendar"
+                    ? route.type === "calendar"
+                    : route.type === "library" && scope === view;
+                const Icon =
+                  view === "calendar"
+                    ? CalendarDays
+                    : view === "notes"
+                      ? FileText
+                      : view === "collections"
+                        ? List
+                        : LayoutGrid;
+                return (
+                  <button
+                    key={view}
+                    className={`nav-icon ${selected ? "selected" : ""}`}
+                    aria-label={label}
+                    title={label}
+                    aria-current={selected ? "page" : undefined}
+                    onClick={() => {
+                      navigate({
+                        type: view === "calendar" ? "calendar" : "library",
+                      });
+                      if (view !== "calendar") setScope(view);
+                    }}
+                  >
+                    <Icon size={22} />
+                  </button>
+                );
+              },
+            )}
+            <span className="nav-spacer" />
+            {route.type === "library" && (
+              <Indicator
+                field={favoriteField}
+                active={starOnly}
+                language={language}
+                label={t("Filter favorites", "Filtrar favoritos")}
+                onClick={() => {
+                  setStarOnly(!starOnly);
+                  if (route.type !== "library") {
+                    navigate({ type: "library" });
+                    setScope("all");
+                  }
+                }}
+              />
+            )}
+          </nav>
+        )}
         <main>
           {!ready ? (
             <div className="empty">
               <LoaderCircle className="spin" />
               <p>{t("Opening your library…", "Abriendo tu biblioteca…")}</p>
             </div>
+          ) : route.type === "calendar" ? (
+            <BlueCalendar
+              library={library}
+              language={language}
+              openItem={(id) => navigate({ type: "item", id })}
+              save={(event) => {
+                const old = current.current.events?.find(
+                  (e) => e.id === event.id,
+                );
+                if ((!old && event.revision > 0) || (old && old.revision + 1 !== event.revision)) {
+                  setNotice(
+                    t(
+                      "This event changed. Reopen it.",
+                      "Este evento ha cambiado. Ábrelo de nuevo.",
+                    ),
+                  );
+                  return false;
+                }
+                return commit({
+                  ...current.current,
+                  events: old
+                    ? current.current.events!.map((e) =>
+                        e.id === event.id ? event : e,
+                      )
+                    : [...(current.current.events || []), event],
+                });
+              }}
+              remove={(event) =>
+                commit({
+                  ...current.current,
+                  events: current.current.events?.filter(
+                    (e) => e.id !== event.id,
+                  ),
+                })
+              }
+            />
           ) : route.type === "library" ? (
             <>
-              <div className="intro">
-                <span className="eyebrow">
-                  {t(
-                    "A LITTLE SPACE FOR EVERYTHING",
-                    "UN PEQUEÑO ESPACIO PARA TODO",
-                  )}
-                </span>
-                <h1>{t("Your world, collected.", "Tu mundo, a mano.")}</h1>
-                <p>
-                  {t(
-                    "A thought, a film, the next little thing. Make room for it.",
-                    "Una idea, una peli, lo próximo que no quieres olvidar.",
-                  )}
-                </p>
-              </div>
-              <div className="library-toolbar">
-                <nav
-                  className="scope"
-                  aria-label={t("Library views", "Vistas de biblioteca")}
-                >
-                  {(["all", "notes", "collections"] as const).map((s) => (
-                    <button
-                      key={s}
-                      className={scope === s ? "selected" : ""}
-                      aria-pressed={scope === s}
-                      onClick={() => setScope(s)}
-                    >
-                      {s === "notes" ? (
-                        <FileText size={17} />
-                      ) : s === "collections" ? (
-                        <List size={17} />
-                      ) : (
-                        <span className="four-dots">⁙</span>
-                      )}
-                      {s === "all"
-                        ? t("Everything", "Todo")
-                        : s === "notes"
-                          ? t("Notes", "Notas")
-                          : t("Collections", "Colecciones")}
-                    </button>
-                  ))}
-                </nav>
-                <Indicator
-                  field={favoriteField}
-                  active={starOnly}
-                  language={language}
-                  onClick={() => setStarOnly(!starOnly)}
-                  label={t("Filter favorites", "Filtrar favoritos")}
-                />
-              </div>
               <div className="search-row">
                 <label className="search">
                   <Search size={18} />
                   <input
                     aria-label={t("Search library", "Buscar en biblioteca")}
-                    placeholder={t("Find something…", "Encuentra algo…")}
+                    placeholder={t("Search", "Buscar")}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -790,31 +879,19 @@ export default function Blue() {
                   )}
                 </label>
               </div>
-              <div className="create-row">
-                <button
-                  className="create-button"
-                  onClick={() => showEditor({ type: "note" })}
-                >
-                  <SquarePen size={19} />
-                  {t("New note", "Nueva nota")}
-                  <Plus size={17} />
-                </button>
-                <button
-                  className="create-button"
-                  onClick={() => showEditor({ type: "collection" })}
-                >
-                  <List size={19} />
-                  {t("New collection", "Nueva colección")}
-                  <Plus size={17} />
-                </button>
-              </div>
               {scope !== "notes" &&
                 !starOnly &&
-                filteredCollections.length > 0 && (
+                (!search || filteredCollections.length > 0) && (
                   <section>
                     <div className="section-label">
                       <h2>{t("Collections", "Colecciones")}</h2>
-                      <span>{filteredCollections.length}</span>
+                      <button
+                        className="icon-button"
+                        aria-label={t("New collection", "Nueva colección")}
+                        onClick={() => showEditor({ type: "collection" })}
+                      >
+                        <Plus size={20} />
+                      </button>
                     </div>
                     <div className="collection-grid">
                       {filteredCollections.map((c) => (
@@ -835,8 +912,7 @@ export default function Blue() {
                                 library.records.filter(
                                   (r) => r.collectionID === c.id,
                                 ).length
-                              }{" "}
-                              {t("items", "elementos")}
+                              }
                             </small>
                           </span>
                           <ChevronRight size={18} />
@@ -845,17 +921,24 @@ export default function Blue() {
                     </div>
                   </section>
                 )}
-              {scope !== "collections" && filteredNotes.length > 0 && (
-                <section>
-                  <div className="section-label">
-                    <h2>{t("Notes", "Notas")}</h2>
-                    <span>{filteredNotes.length}</span>
-                  </div>
-                  <div className="note-grid">
-                    {filteredNotes.map(renderNote)}
-                  </div>
-                </section>
-              )}
+              {scope !== "collections" &&
+                (!search || filteredNotes.length > 0) && (
+                  <section>
+                    <div className="section-label">
+                      <h2>{t("Notes", "Notas")}</h2>
+                      <button
+                        className="icon-button"
+                        aria-label={t("New note", "Nueva nota")}
+                        onClick={() => showEditor({ type: "note" })}
+                      >
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                    <div className="note-grid">
+                      {filteredNotes.map(renderNote)}
+                    </div>
+                  </section>
+                )}
               {scope !== "notes" &&
                 (starOnly || search) &&
                 rootItems.length > 0 && (
@@ -875,45 +958,6 @@ export default function Blue() {
                       )}
                     </div>
                   </section>
-                )}
-              {!library.collections.length &&
-                !library.notes.length &&
-                !search &&
-                !starOnly && (
-                  <div className="empty welcome">
-                    <BlueMark />
-                    <h2>
-                      {t(
-                        "It starts with a little thought.",
-                        "Todo empieza con una idea.",
-                      )}
-                    </h2>
-                    <p>
-                      {t(
-                        "Write it down, make a list, or ask Blue to give it shape.",
-                        "Escríbela, crea una lista o deja que Blue le dé forma.",
-                      )}
-                    </p>
-                    <button
-                      className="prompt-example"
-                      onClick={() => {
-                        setPrompt(
-                          t(
-                            "Save Interstellar in a Movies collection.",
-                            "Guarda Interstellar en una colección Películas.",
-                          ),
-                        );
-                        setChat(true);
-                        input.current?.focus();
-                      }}
-                    >
-                      {t(
-                        "“Let’s start a movie list”",
-                        "«Vamos a crear una lista de pelis»",
-                      )}
-                      <ArrowUp size={16} />
-                    </button>
-                  </div>
                 )}
               {(starOnly || search) &&
                 !filteredNotes.length &&
@@ -945,9 +989,6 @@ export default function Blue() {
                     <Symbol name={collection.symbol} size={30} />
                   </span>
                   <div>
-                    <span className="eyebrow">
-                      {t("COLLECTION", "COLECCIÓN")}
-                    </span>
                     <h1>{text(collection.title, language)}</h1>
                   </div>
                 </div>
@@ -1070,7 +1111,6 @@ export default function Blue() {
               </button>
               <div className="detail-heading">
                 <div>
-                  <span className="eyebrow">{t("NOTE", "NOTA")}</span>
                   <h1>{text(note.title, language)}</h1>
                 </div>
                 <div className="header-actions">
@@ -1218,10 +1258,6 @@ export default function Blue() {
             </div>
           )}
         </main>
-        <footer className="page-footer">
-          <span>blue.</span>
-          <span>{t("A space of your own.", "Un espacio muy tuyo.")}</span>
-        </footer>
       </div>
       <div className={`assistant-wrap ${chat ? "expanded" : ""}`} ref={chatBox}>
         {chat && (
@@ -1235,7 +1271,7 @@ export default function Blue() {
                 <strong>
                   {busy
                     ? t("Blue is thinking…", "Blue está pensando…")
-                    : t("A little help from Blue", "Una mano de Blue")}
+                    : "Blue"}
                 </strong>
               </div>
               <button
@@ -1254,10 +1290,7 @@ export default function Blue() {
               {busy ? (
                 <div className="thinking-line">
                   <LoaderCircle className="spin" size={18} />
-                  {t(
-                    "Working with the model on your Mac…",
-                    "Trabajando con el modelo de tu Mac…",
-                  )}
+                  {t("Thinking…", "Pensando…")}
                 </div>
               ) : chatError ? (
                 <p className="chat-error" role="alert">
@@ -1355,48 +1388,12 @@ export default function Blue() {
                   )}
                 </>
               ) : (
-                <>
-                  <p>
-                    {t(
-                      "Tell me what to keep, find or change. I can shape your collections as you go.",
-                      "Dime qué guardar, encontrar o cambiar. Puedo dar forma a tus colecciones sobre la marcha.",
-                    )}
-                  </p>
-                  <div className="suggestions">
-                    {[
-                      t(
-                        "Create a note with my weekend ideas",
-                        "Crea una nota con ideas para el finde",
-                      ),
-                      collection
-                        ? t(
-                            "Add a 🗿 indicator called Bass",
-                            "Añade un indicador 🗿 llamado Bass",
-                          )
-                        : t(
-                            "Save Interstellar in a Movies collection",
-                            "Guarda Interstellar en una colección Películas",
-                          ),
-                    ].map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => {
-                          setPrompt(p);
-                          input.current?.focus();
-                        }}
-                      >
-                        {p}
-                        <ArrowUp size={15} />
-                      </button>
-                    ))}
-                  </div>
-                  <p className="microcopy">
-                    {t(
-                      "AI runs on your Mac. Keep it awake.",
-                      "La IA funciona en tu Mac. Déjalo despierto.",
-                    )}
-                  </p>
-                </>
+                <p className="muted">
+                  {t(
+                    "What would you like to save or change?",
+                    "¿Qué quieres guardar o cambiar?",
+                  )}
+                </p>
               )}
             </div>
           </section>
@@ -1627,8 +1624,8 @@ export default function Blue() {
             </p>
             <p>
               {t(
-                "This preview covers notes and collections. Native alarms and device sync are not available here.",
-                "Esta prueba incluye notas y colecciones. Las alarmas nativas y la sincronización entre dispositivos no están disponibles aquí.",
+                "Calendar events stay in this browser. They do not ring or send notifications. Device sync is not available.",
+                "Los eventos del calendario se guardan en este navegador. No suenan ni envían notificaciones. No hay sincronización entre dispositivos.",
               )}
             </p>
           </div>

@@ -54,6 +54,15 @@ export type Note = {
   revision: number;
   updatedAt: number;
 };
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  date: number;
+  allDay: boolean;
+  day?: string;
+  color: string;
+  revision: number;
+};
 export type Library = {
   formatVersion: 2;
   folders: never[];
@@ -61,6 +70,8 @@ export type Library = {
   records: Item[];
   notes: Note[];
   alarms: never[];
+  events?: CalendarEvent[];
+  imports?: string[];
 };
 export type Filter = {
   fieldID: string;
@@ -336,6 +347,38 @@ export function validLibrary(input: unknown): input is Library {
           return false;
       }
     }
+    if (
+      s.imports !== undefined &&
+      (!Array.isArray(s.imports) ||
+        s.imports.length > 100 ||
+        !s.imports.every(
+          (id) => typeof id === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(id),
+        ))
+    )
+      return false;
+    if (
+      s.events !== undefined &&
+      (!Array.isArray(s.events) ||
+        s.events.length > 10000 ||
+        !s.events.every(
+          (e) =>
+            validID(e.id) &&
+            typeof e.title === "string" &&
+            !!e.title.trim() &&
+            e.title.length <= 240 &&
+            Number.isFinite(e.date) &&
+            Math.abs(e.date) < 8_000_000_000_000 &&
+            typeof e.allDay === "boolean" &&
+            (!e.allDay ||
+              (typeof e.day === "string" &&
+                /^\d{4}-\d{2}-\d{2}$/.test(e.day) &&
+                new Date(e.day).toISOString().slice(0, 10) === e.day)) &&
+            colors.includes(e.color) &&
+            Number.isInteger(e.revision) &&
+            e.revision >= 0,
+        ))
+    )
+      return false;
     return s.notes.every(
       (n) =>
         validID(n.id) &&

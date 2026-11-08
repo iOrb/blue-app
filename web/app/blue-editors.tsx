@@ -28,7 +28,7 @@ import {
 } from "./blue-model";
 export const words = (l: Language, en: string, es: string) =>
   l === "es" ? es : en;
-function useDraft<T>(key: string, initial: T) {
+export function useDraft<T>(key: string, initial: T) {
   const [draft, setDraft] = useState<T>(() => {
     try {
       const saved = sessionStorage.getItem(key);
