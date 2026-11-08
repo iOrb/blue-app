@@ -199,7 +199,7 @@ struct EventEditor: View {
                             }
                         }
                         Text(l("event.noAlarm")).font(.footnote).foregroundStyle(.tertiary)
-                        if saved != nil { QuietButton(key: "delete", symbol: "trash") { confirmDelete = true } }
+                        if saved != nil { QuietButton(key: "delete", symbol: "minus") { confirmDelete = true } }
                         ErrorLine(key: error)
                     }.padding(.top, 10)
                 }
@@ -214,15 +214,12 @@ struct EventEditor: View {
                         title: "", date: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: date) ?? date
                     )
             }
-            .confirmationDialog(l("event.confirmDelete"), isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button(l("delete"), role: .destructive) {
-                    guard let saved else { return }
-                    do {
-                        try store.confirmDeletion(
-                            PendingDeletion(kind: "event", id: saved.id, revision: saved.revision))
-                        dismiss()
-                    } catch { self.error = (error as? BlueError ?? .saveFailed).key }
-                }
+            .blueConfirmation(isPresented: $confirmDelete, title: l("event.confirmDelete")) {
+                guard let saved else { return }
+                do {
+                    try store.confirmDeletion(PendingDeletion(kind: "event", id: saved.id, revision: saved.revision))
+                    dismiss()
+                } catch { self.error = (error as? BlueError ?? .saveFailed).key }
             }
     }
     private func binding<T>(_ path: WritableKeyPath<CalendarEvent, T>) -> Binding<T> {
@@ -293,18 +290,16 @@ struct AlarmEditor: View {
         .onChange(of: enabled) { _, _ in scheduleSave() }
         .modifier(KeyboardDismissToolbar()).navigationTitle(l(existing == nil ? "alarm.new" : "alarm.edit"))
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(l("alarm.confirmDelete"), isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button(l("delete"), role: .destructive) {
-                Task {
-                    guard let saved else { return }
-                    revisionTask?.cancel()
-                    busy = true
-                    do {
-                        try await alarms.delete(saved)
-                        dismiss()
-                    } catch { self.error = (error as? BlueError ?? .alarmFailed).key }
-                    busy = false
-                }
+        .blueConfirmation(isPresented: $confirmDelete, title: l("alarm.confirmDelete")) {
+            Task {
+                guard let saved else { return }
+                revisionTask?.cancel()
+                busy = true
+                do {
+                    try await alarms.delete(saved)
+                    dismiss()
+                } catch { self.error = (error as? BlueError ?? .alarmFailed).key }
+                busy = false
             }
         }
         .onAppear {

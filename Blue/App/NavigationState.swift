@@ -14,8 +14,17 @@ enum Route: Hashable {
 @Observable
 final class NavigationState {
     var tab = 0
-    var scope = "all"
+    var scope = "collections"
     var path: [Route] = []
+    var pendingAssistant = false
+    var detail: Route?
+    var presentations: Set<UUID> = []
+    func open(_ route: Route) {
+        switch route {
+        case .record, .newRecord, .note, .newNote: detail = route
+        default: path.append(route)
+        }
+    }
     var selectedDate = Date()
     var highlightedRecord: UUID?
     var highlightedAlarm: UUID?

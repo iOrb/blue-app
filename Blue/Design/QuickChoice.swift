@@ -76,6 +76,7 @@ struct IndicatorControl: View {
                     .symbolVariant(selected ? .fill : .none)
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.3))
+                    .saturation(selected ? 1 : 0)
 
                     .frame(width: 44, height: 44)
 
@@ -136,9 +137,12 @@ struct PropertyControl: View {
                                 selected
                                     ? (filter ? nil : field.inactiveStatus.map(FieldValue.option)) : .option(option.id))
                         } label: {
-                            ItemGlyph(symbol: field.symbol(for: option)).font(.system(size: 20))
-                                .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.3))
-                                .frame(minWidth: 44, minHeight: 44)
+                            ItemGlyph(symbol: field.symbol(for: option)).symbolVariant(selected ? .fill : .none).font(
+                                .system(size: 20)
+                            )
+                            .foregroundStyle(selected ? field.indicatorColor : Color.secondary.opacity(0.3))
+                            .saturation(selected ? 1 : 0)
+                            .frame(minWidth: 44, minHeight: 44)
                         }.buttonStyle(.plain).accessibilityLabel(l.text(option.label))
                             .accessibilityValue(l(selected ? "yes" : "no"))
                             .accessibilityIdentifier("option-\(field.id)-\(option.id)")
@@ -240,6 +244,7 @@ struct RecordIndicators: View {
 }
 
 struct PropertyFlow: Layout {
+    var centered = false
     var spacing: CGFloat = 6
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 320
@@ -259,21 +264,31 @@ struct PropertyFlow: Layout {
         return CGSize(width: width, height: y + rowHeight)
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
+        var rows: [[Int]] = [[]]
+        var widths: [CGFloat] = [0]
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        for index in sizes.indices {
+            let width = min(sizes[index].width, bounds.width)
+            if !rows[rows.count - 1].isEmpty && widths[widths.count - 1] + spacing + width > bounds.width {
+                rows.append([])
+                widths.append(0)
             }
-            view.place(
-                at: CGPoint(x: x, y: y),
-                proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
-            x += min(size.width, bounds.width) + spacing
-            rowHeight = max(rowHeight, size.height)
+            let row = rows.count - 1
+            if !rows[row].isEmpty { widths[row] += spacing }
+            rows[row].append(index)
+            widths[row] += width
+        }
+        var y = bounds.minY
+        for (rowIndex, row) in rows.enumerated() {
+            var x = bounds.minX + (centered ? max(0, (bounds.width - widths[rowIndex]) / 2) : 0)
+            for index in row {
+                let size = sizes[index]
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+                x += min(size.width, bounds.width) + spacing
+            }
+            y += (row.map { sizes[$0].height }.max() ?? 0) + spacing
         }
     }
 }

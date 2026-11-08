@@ -8,7 +8,7 @@ struct LibraryView: View {
     private var scope: String { navigation.scope }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: 18) {
                 if scope == "all" || scope == "collections" {
                     VStack(alignment: .leading, spacing: 8) {
                         heading("library.collections")
@@ -22,10 +22,9 @@ struct LibraryView: View {
                                     Spacer()
                                     Text("\(store.records(in: collection.id).count)").font(.subheadline)
                                         .foregroundStyle(.tertiary)
-                                }.frame(minHeight: 64).contentShape(Rectangle())
+                                }.frame(minHeight: 54).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier(
                                 "collection-\(collection.title.key ?? collection.title.english)")
-                            Divider().overlay(Color.primary.opacity(0.02))
                         }
                     }
                 }
@@ -34,13 +33,12 @@ struct LibraryView: View {
                         heading("tab.notes")
                         ForEach(store.state.notes.sorted { $0.updatedAt > $1.updatedAt }) { note in
                             Button {
-                                navigation.path.append(.note(note.id))
+                                navigation.open(.note(note.id))
                             } label: {
                                 Text(l.text(note.title)).font(.title3.weight(.medium))
-                                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading).contentShape(
+                                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading).contentShape(
                                         Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier("note-\(l.text(note.title))")
-                            Divider()
                         }
                     }
                 }
@@ -51,19 +49,12 @@ struct LibraryView: View {
                     }
                 }
                 ErrorLine(key: navigation.noticeKey)
-            }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 28)
+            }.padding(.horizontal, 24).padding(.top, 4).padding(.bottom, 100)
                 .frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
         }
         .background(Color(uiColor: .systemBackground)).scrollDismissesKeyboard(.interactively)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(l("app.name")) {
-                    navigation.scope = "all"
-                    navigation.tab = 0
-                }
-                .font(.title3.weight(.bold)).accessibilityIdentifier("homeBlue")
-            }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) { SettingsButton() }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .topBarTrailing) {
                 if scope == "calendar" {
@@ -71,7 +62,11 @@ struct LibraryView: View {
                         "newEvent")
                 } else {
                     Menu {
-                        NavigationLink(value: Route.newNote) { Label(l("note.new"), systemImage: "text.alignleft") }
+                        Button {
+                            navigation.open(.newNote)
+                        } label: {
+                            Label(l("note.new"), systemImage: "text.alignleft")
+                        }
                         NavigationLink(value: Route.newCollection) {
                             Label(l("collection.new"), systemImage: "square.stack")
                         }

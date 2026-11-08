@@ -4,7 +4,7 @@ A quiet home for Markdown notes, adaptable collections, and a calendar. This rep
 
 <p>
   <img src="docs/screenshots/library-en.png" width="230" alt="Blue library in English">
-  <img src="docs/screenshots/custom-indicators.png" width="230" alt="Custom visual indicators in collection rows and filters">
+  <img src="docs/screenshots/item-detail.png" width="230" alt="Centered visual indicators in the item detail">
   <img src="docs/screenshots/compact-calendar-es.png" width="230" alt="Blue calendar">
 </p>
 
@@ -34,7 +34,7 @@ The normal test suite uses isolated demo data, Swift Testing business/persistenc
 
 ## Try it
 
-Start with a note or an empty collection, or tell Blue what to save. Existing collections remain editable. Bottom navigation opens Notes, Collections, Calendar or Blue. The brand opens the combined view, with the calendar below the notes. Use the plus button for a note, collection, item or calendar event. Collections gain useful typed properties through conversation. Ask Blue to add indicators with your own meaning, icon and color, or to change a collection icon. The same icons work in rows, detail and filters. Saved notes open as rendered Markdown; tap the content to edit; valid changes save automatically. Change language in Settings without losing an open draft. Export your library as versioned JSON from Settings.
+Start with a plain-text note or an empty collection, or tell Blue what to save. The root has Collections, Notes and Calendar; Blue floats separately at the bottom right. Within a collection, fixed back/options controls sit above a scrolling title, count and sort row. Tap the current sort criterion to reverse it. Items open in large detail sheets with centered visual properties. Titles and text autosave as you type. Delete is a red minus in the options menu and opens a centered confirmation modal. Ask Blue to adapt fields/icons or apply and clear filters; no manual icon-filter bar is shown. Change language in Settings without losing drafts, and export a versioned JSON backup there.
 
 With Apple Intelligence ready, ask “What rating did I give Interstellar?”, see the exact saved values in the assistant sheet, then ask “Change Interstellar's rating to 10.” Blue validates and saves through the same store used by the editors. Without a local model, manual controls remain available and the assistant explains its availability. The iPhone 13 mini does not support Apple Intelligence; the private web preview can use the Mac model. All deletions require confirmation. There is no Undo control.
 

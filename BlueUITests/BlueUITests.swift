@@ -66,8 +66,9 @@ final class BlueUITests: XCTestCase {
         app.buttons.containing(.staticText, identifier: "Calendar persistence").firstMatch.tap()
         XCTAssertEqual(app.textFields["eventTitle"].value as? String, "Calendar persistence")
         app.buttons["Delete"].tap()
-        XCTAssertTrue(app.sheets["Delete this event?"].waitForExistence(timeout: 5))
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.7)).tap()
+        XCTAssertTrue(app.buttons["closeConfirmation"].waitForExistence(timeout: 5))
+        screenshot(app, "delete-modal")
+        app.buttons["closeConfirmation"].tap()
         XCTAssertTrue(app.textFields["eventTitle"].exists)
         screenshot(app, "event-autosaved")
     }
@@ -78,57 +79,83 @@ final class BlueUITests: XCTestCase {
         let title = app.textFields["noteTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         replace(title, "Quiet notes")
-        app.descendants(matching: .any).matching(identifier: "markdownPreview").firstMatch.tap()
-        let body = app.textViews["noteBody"]
+        let body = app.descendants(matching: .any).matching(identifier: "noteBody").firstMatch
         XCTAssertTrue(body.waitForExistence(timeout: 5))
         body.tap()
-        body.typeText("# Space\n\n**Keep it simple.**")
+        body.typeText("First line\nSecond line")
         app.terminate()
         app = launch(reset: false)
         app.buttons["scope-notes"].tap()
         app.buttons["note-Quiet notes"].tap()
-        XCTAssertTrue(
-            app.buttons.matching(identifier: "markdownPreview").matching(
-                NSPredicate(format: "label CONTAINS %@", "Space")
-            ).firstMatch.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.textViews["noteBody"].exists)
+        let reopenedBody = app.descendants(matching: .any).matching(identifier: "noteBody").firstMatch
+        XCTAssertTrue(reopenedBody.waitForExistence(timeout: 5))
+        XCTAssertEqual(reopenedBody.value as? String, "First line\nSecond line")
         XCTAssertFalse(app.buttons["noteSave"].exists)
-        screenshot(app, "rendered-note-autosaved")
+        app.buttons["detailOptions"].tap()
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(app.buttons["closeConfirmation"].waitForExistence(timeout: 5))
+        app.buttons["closeConfirmation"].tap()
+        XCTAssertTrue(reopenedBody.exists)
+        screenshot(app, "plain-note-autosaved")
+        app.buttons["askBlue"].tap()
+        XCTAssertTrue(app.textFields["assistantInput"].waitForExistence(timeout: 5))
+        dismissSheet(app)
+        app.buttons["note-Quiet notes"].tap()
+        XCTAssertTrue(app.buttons["detailOptions"].waitForExistence(timeout: 5))
+        app.buttons["detailOptions"].tap()
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(app.buttons["confirmDelete"].waitForExistence(timeout: 5))
+        app.buttons["confirmDelete"].tap()
+        XCTAssertTrue(app.buttons["scope-notes"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["note-Quiet notes"].exists)
+        app.terminate()
+        app = launch(reset: false)
+        app.buttons["scope-notes"].tap()
+        XCTAssertFalse(app.buttons["note-Quiet notes"].exists)
     }
-    @MainActor func testCollectionIconsNumberWheelAndFilterRemoval() {
+    @MainActor func testCollectionSortIconsNumberWheelAndRelaunch() {
         let app = launch()
         app.buttons["collection-template.movies"].tap()
-        let favorite = app.buttons["quickFilter-__favorite"]
-        XCTAssertTrue(favorite.waitForExistence(timeout: 5))
-        favorite.tap()
-        favorite.tap()
+        XCTAssertFalse(app.buttons["quickFilter-__favorite"].exists)
+        XCTAssertFalse(app.buttons["scope-notes"].exists)
+        let sort = app.buttons["sortDirection"]
+        XCTAssertTrue(sort.waitForExistence(timeout: 5))
+        sort.tap()
+        XCTAssertEqual(sort.value as? String, "Descending")
+        sort.tap()
+        screenshot(app, "collection-compact-header")
         app.buttons["row-Interstellar"].tap()
-        let rating = app.buttons["property-rating"]
+        let rating = app.scrollViews["recordEditor"].buttons["property-rating"]
         XCTAssertTrue(rating.waitForExistence(timeout: 5))
         rating.tap()
         let wheel = app.pickerWheels.firstMatch
         XCTAssertTrue(wheel.waitForExistence(timeout: 5))
         wheel.adjust(toPickerWheelValue: "8.5")
         dismissSheet(app)
-        XCTAssertEqual(app.buttons["property-rating"].value as? String, "8.5")
+        XCTAssertEqual(app.scrollViews["recordEditor"].buttons["property-rating"].value as? String, "8.5")
         XCTAssertFalse(app.buttons["recordSave"].exists)
         screenshot(app, "record-visual-properties")
         app.terminate()
         let reopened = launch(reset: false)
         reopened.buttons["collection-template.movies"].tap()
         reopened.buttons["row-Interstellar"].tap()
-        XCTAssertEqual(reopened.buttons["property-rating"].value as? String, "8.5")
+        XCTAssertEqual(reopened.scrollViews["recordEditor"].buttons["property-rating"].value as? String, "8.5")
     }
     @MainActor func testAssistantSheetReturnAndDraftDismissal() {
         let app = launch()
-        app.buttons["askBlue"].tap()
+        let blue = app.buttons["askBlue"]
+        XCTAssertGreaterThan(blue.frame.minX, app.buttons["scope-calendar"].frame.maxX)
+        blue.tap()
         let input = app.textFields["assistantInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
         input.typeText("What rating did I give Interstellar?\n")
         XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Close"].exists)
+        XCTAssertLessThan(input.frame.midY, app.buttons["result-Interstellar"].frame.midY)
+        XCTAssertFalse(app.buttons["scope-notes"].exists)
         screenshot(app, "assistant-result-sheet")
+        dismissSheet(app)
         app.buttons["scope-notes"].tap()
         XCTAssertFalse(input.exists)
         app.buttons["askBlue"].tap()
@@ -141,15 +168,19 @@ final class BlueUITests: XCTestCase {
     @MainActor func testSpanishOverviewAndTouchTargets() {
         let app = launch()
         spanish(app)
-        XCTAssertTrue(app.buttons["scope-collections"].exists)
+        XCTAssertTrue(app.buttons["scope-collections"].waitForExistence(timeout: 5))
         screenshot(app, "overview-spanish")
         app.buttons["collection-template.movies"].tap()
         screenshot(app, "collection-spanish")
-        for id in ["openFilters", "newRecord", "askBlue"] {
+        for id in ["collectionOptions", "newRecord", "askBlue"] {
             let button = app.buttons[id]
             XCTAssertTrue(button.exists)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height.rounded(), 44, id)
         }
+        app.buttons["askBlue"].tap()
+        XCTAssertTrue(app.textFields["assistantInput"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["scope-notes"].exists)
+        screenshot(app, "assistant-spanish")
     }
     @MainActor func testAccessibilitySizeCalendarAndNotes() {
         let app = XCUIApplication()

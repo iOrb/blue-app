@@ -11,10 +11,12 @@ import Foundation
         var surface: String? = nil
         var selectedDay: String? = nil
         var eventID: UUID? = nil
+        var history: [AssistantExchange]? = nil
     }
     struct ModelBridgeResponse: Codable, Sendable {
         var library: LibraryState
         var result: AssistantResult
+        var history: [AssistantExchange]? = nil
     }
 #endif
 
@@ -30,14 +32,16 @@ import Foundation
         static var isConfigured: Bool { token?.isEmpty == false }
         @MainActor static func respond(
             prompt: String, language: AppLanguage, previousRecord: UUID?, collectionID: UUID?, noteID: UUID?,
-            store: LibraryStore, surface: String = "all", selectedDay: String? = nil, eventID: UUID? = nil
-        ) async throws -> (result: AssistantResult, changed: Bool) {
+            store: LibraryStore, surface: String = "all", selectedDay: String? = nil, eventID: UUID? = nil,
+            history: [AssistantExchange] = []
+        ) async throws -> (result: AssistantResult, changed: Bool, history: [AssistantExchange]?) {
             guard let token else { throw BlueError.modelUnavailable }
             let snapshot = store.state
             let payload = ModelBridgeRequest(
                 prompt: prompt, language: language, previousRecord: previousRecord, collectionID: collectionID,
                 noteID: noteID,
-                library: snapshot, surface: surface, selectedDay: selectedDay, eventID: eventID)
+                library: snapshot, surface: surface, selectedDay: selectedDay, eventID: eventID,
+                history: AssistantExchange.bounded(history))
             var request = URLRequest(url: URL(string: "http://127.0.0.1:7977/respond")!, timeoutInterval: 100)
             request.httpMethod = "POST"
             request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
@@ -79,7 +83,7 @@ import Foundation
                 }
                 try store.update { $0 = reply.library }
             }
-            return (reply.result, changed)
+            return (reply.result, changed, reply.history)
         }
     }
 #endif

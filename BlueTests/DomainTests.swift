@@ -201,6 +201,8 @@ struct PersistenceTests {
         let error = NSError(domain: "com.apple.UnifiedAssetFramework", code: 5000)
         #expect(AssistantService.errorKey(error) == "assistant.modelNotReady")
         #expect(AssistantService.errorKey(BlueError.permissionDenied) == "error.permissionDenied")
+        let serviceFailure = NSError(domain: "FoundationModels.LanguageModelSession.GenerationError", code: -1)
+        #expect(AssistantService.errorKey(serviceFailure) == "assistant.unavailable")
     }
     @Test func cancellingAnAssistantRequestDoesNotOverwriteItsReplacement() async throws {
         let store = try LibraryStore(inMemory: true)

@@ -5,7 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  Trash2,
+  Minus,
   Check,
 } from "lucide-react";
 import {
@@ -306,7 +306,7 @@ export function EventEditor({
             aria-label={t("Delete event", "Eliminar evento")}
             onClick={() => setDeleting(true)}
           >
-            <Trash2 size={20} />
+            <Minus size={20} />
           </button>
         )}
       </Sheet>

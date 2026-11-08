@@ -30,6 +30,10 @@ import FoundationModels
             "Allow public lookup only for published works, public places/people or explicitly requested public facts. Never for private notes or personal topics."
     )
     var publicLookup: Bool
+    @Guide(
+        description:
+            "True if the user asks for a proposal, rewrite suggestion or discussion of saved content without saving. False for simply displaying saved values or making an edit."
+    ) var discussion: Bool
     var clarification: String?
 }
 
@@ -279,6 +283,14 @@ struct ProposeDeletionTool: Tool {
 }
 
 @Generable struct NoteRevisionDraft {
+    @Guide(
+        description:
+            "True only when the user asks to change the note's title. A heading inside the text is not the title.")
+    var editTitle: Bool
+    @Guide(
+        description:
+            "True only when the user asks to change the written body or its paragraphs. False when only renaming the note; preserve its body and headings exactly."
+    ) var editBody: Bool
     @Generable struct Edit {
         @Guide(
             description:
@@ -288,6 +300,10 @@ struct ProposeDeletionTool: Tool {
             description:
                 "A standalone editing instruction for this one block, in English. Resolve paragraph references now; for example: Make this text more concise. Do not copy the block content."
         ) var instruction: String
+        @Guide(
+            description:
+                "Verbatim replacement only when the user supplies the exact new text, such as a new title. Preserve its language and spelling. Nil when the task is to rewrite or shorten existing text."
+        ) var literalReplacement: String?
     }
     @Guide(
         description: "Only the blocks the user requested to change. Preserve all other blocks by omitting them.",
@@ -299,4 +315,41 @@ struct ProposeDeletionTool: Tool {
     var operation: Operation
     @Guide(description: "Exact saved field IDs to remove; empty for other operations.", .count(0...12)) var fieldIDs:
         [String]
+}
+
+@Generable struct ConversationalTurn {
+    @Generable enum Kind { case greeting, acknowledgement, capabilities, generalConversation, savedContent }
+    @Guide(
+        description:
+            "Classify what the message is asking for. Use savedContent for any request about the user's notes, items, properties, collections, calendar, or a previously proposed edit. A question asking for an item's score needs savedContent."
+    ) var kind: Kind
+}
+
+@Generable struct ChangePermission {
+    @Guide(
+        description:
+            "Explain whether the user asks to save a change now, or only to discuss/read/propose without saving. Preserve any negation or 'not yet' constraint."
+    ) var reason: String
+    @Guide(
+        description:
+            "True only if this message authorizes a saved change now. A suggestion or proposal that the user has not accepted is false."
+    ) var saveNow: Bool
+    @Guide(description: "True if the user requests a suggested rewrite or discussion without saving it yet.")
+    var proposal: Bool
+}
+
+@Generable struct ProposalAcceptance {
+    @Generable enum Action { case acceptExistingProposal, differentEdit, discussion }
+    @Guide(
+        description:
+            "Classify the current message: accepting the exact existing proposal, requesting a different edit such as renaming, or discussing without saving."
+    ) var action: Action
+}
+
+@Generable struct NoteReadIntent {
+    @Guide(
+        description:
+            "True when the user wants candidate wording: a shorter version, rewrite, suggested title or replacement paragraph, even when asking not to save it yet. False for explaining, summarizing or answering a question about the note."
+    )
+    var rewriteProposal: Bool
 }

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { validHistory } from "../../blue-conversation";
 import { validLibrary } from "../../blue-model";
 export const dynamic = "force-dynamic";
 const headers = {
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
       !body.prompt.trim() ||
       body.prompt.length > 2000 ||
       !["en", "es"].includes(body.language) ||
-      !validLibrary(body.library)
+      !validLibrary(body.library) ||
+      (body.history !== undefined && !validHistory(body.history))
     )
       return Response.json({ error: "invalid" }, { status: 400, headers });
     const response = await fetch(
@@ -55,8 +57,9 @@ export async function POST(request: Request) {
     const result = (await response.json()) as {
       library: unknown;
       result: unknown;
+      history: unknown;
     };
-    if (!validLibrary(result.library) || !result.result)
+    if (!validLibrary(result.library) || !result.result || !validHistory(result.history))
       throw new Error("invalid");
     // The browser owns its one-time import marker; calendar events are shared with native inference.
     result.library = {

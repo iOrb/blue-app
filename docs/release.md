@@ -17,9 +17,9 @@ Free Personal Team provisioning is temporary. Apple states that App IDs, registe
 
 ## Device checks
 
-- Confirm English/Spanish switching while editing a note and with a collection filter active.
+- Confirm English/Spanish switching while editing a note and with a Blue-applied collection query active. Check collection back/options, ascending/descending sorting, plain-text notes, centered deletion modal, the separate Blue button, top composer, outside-tap dismissal and preserved drafts at the physical keyboard size.
 - Tap a rating, scroll the number picker, dismiss it, terminate Blue and confirm persistence. Create a calendar event through + and check the day sheet after relaunch.
-- On an Apple Intelligence-compatible iPhone with its local model ready, enable Airplane Mode and ask Blue to read Interstellar's rating, then change it. Verify the actual row and relaunch. Manual functionality works on iPhones without that model.
+- On an Apple Intelligence-compatible iPhone with its local model ready, enable Airplane Mode and ask Blue to read Interstellar's rating, then change it. Verify the actual row and relaunch. Also say hello with that item selected, propose a note rewrite without saving, then explicitly accept the proposal. Manual functionality works on iPhones without that model.
 - Create an alarm a few minutes ahead, grant the AlarmKit permission, lock the phone, and verify delivery. Check silent/Focus modes, permission denial, disable/delete, recurrence and time-zone changes. Personal Team installation itself does not establish these behaviors.
 - Review Dynamic Type, VoiceOver reading order, Reduce Motion and keyboard interactions on the real display.
 

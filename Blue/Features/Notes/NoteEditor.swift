@@ -3,6 +3,8 @@ import SwiftUI
 struct NoteEditor: View {
     var noteID: UUID?
     @Environment(LibraryStore.self) private var store
+    @Environment(NavigationState.self) private var navigation
+    @Environment(AssistantService.self) private var assistant
     @Environment(Localizer.self) private var l
     @Environment(\.dismiss) private var dismiss
     @State private var draft: Note?
@@ -10,28 +12,19 @@ struct NoteEditor: View {
     @State private var markdown = ""
     @State private var error: String?
     @State private var confirmDelete = false
+    @FocusState private var renaming: Bool
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let draft {
-                    IndicatorControl(field: .favoriteIndicator, selected: draft.favorite == true) {
-                        self.draft?.favorite = !(draft.favorite ?? false)
-                        save()
-                    }.accessibilityIdentifier("noteFavorite")
-                    EditableMarkdown(
-                        text: Binding(
-                            get: { markdown },
-                            set: {
-                                markdown = $0
-                                save()
-                            }))
+        VStack(spacing: 0) {
+            DetailHeader(close: { dismiss() }) {
+                Button(l("rename")) { renaming = true }
+                Button(role: .destructive) {
+                    confirmDelete = true
+                } label: {
+                    Label(l("delete"), systemImage: "minus")
                 }
-                ErrorLine(key: error)
-            }.padding(24).frame(maxWidth: 760, alignment: .leading).frame(maxWidth: .infinity)
-        }.scrollDismissesKeyboard(.interactively).background(Color(uiColor: .systemBackground))
-            .navigationBarTitleDisplayMode(.inline).modifier(KeyboardDismissToolbar())
-            .toolbar {
-                ToolbarItem(placement: .principal) {
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
                     TextField(
                         l("title"),
                         text: Binding(
@@ -41,20 +34,37 @@ struct NoteEditor: View {
                                 save()
                             })
                     )
-                    .font(.title2.weight(.semibold)).accessibilityIdentifier("noteTitle")
+                    .font(.title.weight(.bold)).focused($renaming).accessibilityIdentifier("noteTitle")
+                    PlainNoteBody(
+                        text: Binding(
+                            get: { markdown },
+                            set: {
+                                markdown = $0
+                                save()
+                            }))
+                    ErrorLine(key: error)
+                }.padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 92).frame(
+                    maxWidth: 760, alignment: .leading
+                ).frame(maxWidth: .infinity)
+            }.accessibilityIdentifier("noteEditor").scrollDismissesKeyboard(.interactively)
+        }.background(Color(uiColor: .systemBackground)).modifier(KeyboardDismissToolbar())
+            .overlay(alignment: .bottom) {
+                if !confirmDelete {
+                    BlueNavigation(
+                        showsSections: false,
+                        ask: {
+                            if let draft { assistant.selectNote(draft.id) }
+                            navigation.pendingAssistant = true
+                            navigation.detail = nil
+                        })
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    QuietButton(key: "delete", symbol: "trash") { confirmDelete = true }
-                }.sharedBackgroundVisibility(.hidden)
             }
-            .confirmationDialog(l("note.confirmDelete"), isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button(l("delete"), role: .destructive) {
-                    guard let draft else { return }
-                    do {
-                        try store.confirmDeletion(PendingDeletion(kind: "note", id: draft.id, revision: draft.revision))
-                        dismiss()
-                    } catch { self.error = (error as? BlueError ?? .saveFailed).key }
-                }
+            .blueConfirmation(isPresented: $confirmDelete, title: l("note.confirmDelete")) {
+                guard let draft else { return }
+                do {
+                    try store.confirmDeletion(PendingDeletion(kind: "note", id: draft.id, revision: draft.revision))
+                    dismiss()
+                } catch { self.error = (error as? BlueError ?? .saveFailed).key }
             }
             .onAppear {
                 guard draft == nil else { return }

@@ -1,46 +1,33 @@
-# Verification — 8 November 2026, clean navigation and semantic assistant
+# Verification — 8 November 2026, compact collections and plain notes
 
-Public repository: `iOrb/blue-app`. Delivery includes the native simulator app and the private web preview. No TestFlight, App Store Connect, paid membership or distribution secrets are configured. Physical installation remains a free Personal Team action in Xcode.
+Public repository: `iOrb/blue-app`. Native simulator development and direct free Personal Team installation remain the delivery route; no paid distribution or TestFlight. Web version 5 is published owner-private at https://blue-iorb-mobile-20261108.ablazecloak.chatgpt.site using source `9001c6f46001936ab4338940f12dc36c35d2da31`, deployment `appgdep_6af0d325a9dc8191b33138804663eb2e`, environment revision 2.
 
-## Environment and commands
+## Environment and completed checks
 
-macOS 26.6.2, Apple silicon; Xcode 27.2 (27B52), Swift 6.4.2, complete concurrency checking, minimum iOS 26.0. Tests ran on iOS 27.2 in the isolated Blue Verification (iPhone 17 Pro) and Blue Compact (iPhone 13 mini) simulators. The main Blue iPhone library was preserved.
+macOS 26.6.2, Apple silicon, Xcode 27.2 (27B52), Swift 6.4.2; Swift 6 complete concurrency checks and minimum iOS 26.0. Isolated Blue Compact (iPhone 13 mini) and Blue Verification (iPhone 17 Pro) use iOS 27.2. The main Blue iPhone library is preserved.
 
-- `xcodegen generate`
-- `scripts/check.sh` — 213 localized keys, English/Spanish placeholders and formatting pass.
-- `scripts/build.sh Debug` — followed by test builds after the final changes.
-- `BLUE_DEVICE_NAME='Blue Verification' scripts/test.sh`
-- `BLUE_DEVICE_NAME='Blue Compact' BLUE_DEVICE_TYPE='com.apple.CoreSimulator.SimDeviceType.iPhone-13-mini' scripts/test.sh -only-testing:BlueUITests/BlueUITests`
-- Targeted UI reruns after fixing the assistant's duplicated accessibility navigation and large-text layout.
-- `scripts/test-model-mac.sh` — actual Foundation Models, shared production tools/store, isolated synthetic data.
-- `BLUE_DEVICE_NAME='Blue Verification' scripts/profile.sh`
-- Final `scripts/build.sh Release`, `scripts/build-device.sh` and `scripts/run.sh` pass. The latter installs/launches the updated Debug app on Blue iPhone without resetting its library.
+- `scripts/check.sh`: formatting, 217 English/Spanish string keys, matching placeholders and script syntax pass.
+- `BLUE_DEVICE_NAME='Blue Compact' BLUE_DEVICE_TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-13-mini scripts/test.sh`: six UI flows passed; the Spanish check exposed a 36-point system-toolbar menu and a dismissal timing assertion (`Tests-20261108-204726.xcresult`). The collection header now uses explicit 44-point controls and the test waits for presentation dismissal.
+- Final focused compact command adds `-only-testing:BlueUITests/BlueUITests/testSpanishOverviewAndTouchTargets -only-testing:BlueUITests/BlueUITests/testNoteTapEditAutosaveAndRelaunch -only-testing:BlueUITests/BlueUITests/testCollectionSortIconsNumberWheelAndRelaunch -only-testing:BlueTests`. All 34 unit tests and all three UI flows pass in `Tests-20261108-205152.xcresult`.
+- The note flow verifies plain-text line breaks after relaunch, cancel-with-cross, opening Blue from the detail, explicit confirmed deletion and absence after another relaunch. The collection flow verifies ascending/descending order, no manual filter bar/section navbar, a numeric wheel edit and persisted exact value. Spanish checks the 44-point fixed options header and top Blue composer.
+- `scripts/build.sh Release`, `scripts/build-device.sh` and `scripts/run.sh` pass. The last command installs/launches Debug on the main Blue iPhone simulator without resetting its library; unsigned device compilation is not physical installation.
+- Web `npm run typecheck`, `npm test` (nine tests) and the production build pass. The Sites workflow rebuilt the pushed source and packaged it; source/archive scans found no runtime token or private import payload.
 
-## Native results
+All seven normal-size UI flows pass in `Tests-20261108-205436.xcresult` using `BLUE_DEVICE_NAME='Blue Verification' scripts/test.sh -only-testing:BlueUITests/BlueUITests`. This includes maximum accessibility text size/dark appearance, overview/calendar, chat Enter/result/draft preservation, collection sorting/number picker/relaunch, event autosave/delete cancellation, plain-note lifecycle and Spanish touch targets. Native UI tests use the explicitly identified DEBUG assistant double; they do not establish real model correctness.
 
-All 32 Swift Testing tests passed in `Tests-20261108-190217.xcresult`. They cover typed values, optimistic revisions, rollback, persistence/relaunch, legacy flattening, shared indicators, schema confirmation, calendar event persistence and stale deletion, read-only tool restrictions and AlarmKit adapter failure paths.
+## Visual inspection
 
-All seven regular UI flows passed across the full runs and focused corrections:
+Compact native screenshots were inspected in both English and Spanish: centered collection title/count, left sort row, fixed back/options, filled eye indicators, centered detail properties and plain notes. Web inspection at 375 × 812 and desktop width verifies the same hierarchy, fixed controls during scroll, a floating Blue button within item details, a top chat composer, hidden section navigation and a centered delete modal with a top-right cross. Cancelling the web modal preserves the item. The published authenticated Spanish page retains existing lists, favorites and custom emoji indicators. Public screenshot fixtures in `docs/screenshots` contain test data; live user screenshots remain ignored under `artifacts`.
 
-- `Tests-20261108-184212.xcresult`: six compact flows passed before the final chat-navigation/accessibility refinements.
-- `Tests-20261108-190217.xcresult` (normal) and `Tests-20261108-190510.xcresult` (compact): six of seven UI flows passed; the chat test exposed a duplicate accessibility element for the background navigation. The hidden background navigation was then removed while the assistant sheet is open.
-- `Tests-20261108-190753.xcresult`: corrected Enter/result/direct-navigation/draft-preservation chat flow passed on the compact simulator.
-- `Tests-20261108-190957.xcresult`: final chat and overview/calendar-day flows passed after extending the sheet background through the bottom safe area.
-- `Tests-20261108-191058.xcresult`: maximum accessibility text size passed in dark appearance after removing the redundant month header at that size. Simulator appearance was restored afterwards.
+## AI verification and current blocker
 
-Screenshots were inspected at normal and compact widths in both languages, plus maximum text size/dark appearance. They show title-only note overviews, collection names/counts, shared visual properties, automatic saving after relaunch, rendered Markdown, calendar agenda sheets, and the Blue sheet without Close/Save/Edit/Undo buttons. Screenshot fixtures contain synthetic data. See [screenshots](screenshots).
+An earlier candidate passed nine genuine Foundation Models conversation cases (`artifacts/conversation-model.log`, 1.18–8.21 seconds): greeting with a movie selected, capabilities, exact saved read after chat, thanks, a proposed note rewrite without saving, acceptance of the exact stored proposal, rename preserving the body, greeting plus new-note command, and English acknowledgement. Subsequent regression checks found that a boolean conversation classifier could misroute a saved-value question. The final semantic enum classifier passed an isolated twelve-message probe, including Spanish reads, field removal, proposals and implicit ratings; no command regex or keyword routing was introduced.
 
-## Real model verification
+The final complete real-model rerun is **not passed**. During the regression run the Mac's own Foundation Models service began rejecting generation with `SensitiveContentAnalysisML` code 15 / underlying `ModelManagerError` 1013, despite reporting available. A separate minimal model probe then failed identically; rebuilding/restarting Blue's bridge did not fix the platform error. The final code surfaces `assistant.unavailable`. Earlier ten-case semantic and five-case web successes belong to the previous delivery, not proof of this final model revision.
 
-The final Mac integration run passed ten checks: named exact-record read from the overview, open-record rating read, implicit Spanish 8.5 edit with reopen verification, negated edit without mutation, shortening the second paragraph while preserving the heading/other paragraph/title, staging field removal, calendar creation without an alarm, moving the same event to 22:00, preparing its deletion for confirmation, and a French rating edit.
+Current production Worker HTTP checks pass four negative cases: unauthenticated (401), foreign origin (403), malformed request (400), oversized conversation history (400). A valid request through Worker → gateway → rebuilt bridge returns model-unavailable with the exact synthetic library unchanged and bounded conversation history. The six-case web conversational success suite remains blocked at the greeting by that same platform failure. Tokens and environment secrets were preserved. Actual native inference is unavailable on iPhone 13 mini; manual editing works there. The web testing path requires the Mac and tunnel to remain awake/reachable.
 
-Observed request times in that run were 1.50–9.52 seconds. In the negated-edit case the model requested clarification and made no change. These checks establish the tested outcomes, not universal language understanding. Earlier runs exposed wrong note rewrites, field-removal arguments, and reference selection; the implementation now uses a semantic target resolver, focused block-edit instructions, explicit schema intent, readable ISO dates and retained event context. IDs, types, revisions, limits and the one-mutation ledger remain deterministic validation.
-
-The production web Worker, authenticated gateway and rebuilt Mac bridge passed five additional genuine requests: named rating lookup (2.61 s), note block edit (2.57 s), calendar creation (3.36 s), follow-up move (4.26 s), and a custom 🗿 purple indicator with a 🚬 collection icon (4.71 s). Import markers and events survived round trips. Browser Enter-to-send displayed only Interstellar and its exact stored rating, inside the Blue sheet. The same read-only flow also succeeded on the deployed owner-private Site.
-
-The web connection requires this Mac and its temporary tunnel to remain running. The native Release/device target contains no bridge. Native Apple Intelligence is unavailable on an iPhone 13 mini; manual features remain available there. The simulator bridge is explicitly identified as a DEBUG development path.
-
-## Performance
+## Earlier performance baseline (before this redesign)
 
 `Performance-20261108-190521.xcresult` passed four Release UI metrics tests and the pure query benchmark. Three launch/scroll samples and ten query samples; setup excluded. Other verification work ran on the Mac concurrently, so these are development observations, not hardware guarantees or controlled before/after comparisons.
 
@@ -54,11 +41,10 @@ The web connection requires this Mac and its temporary tunnel to remain running.
 
 No numerical hitch result was emitted; no zero-hitch claim is made. Collection queries and persistence diffing are on the main actor; this is a bounded personal-library implementation, not a paginated database.
 
-## Remaining checks and limits
+## Remaining physical and integration checks
 
-- Free Personal Team signing, actual iPhone installation and physical Safari/Home Screen behavior remain unverified.
-- Actual AlarmKit permission/delivery while locked, recurrence, Focus/silent behavior, revocation and time-zone changes require hardware. Calendar events do not ring.
-- Microphone permission, interruption and recognition on the physical iPhone; VoiceOver speech/order and battery/thermal behavior remain device checks.
-- AI output is probabilistic and can need clarification. Catalogs and note size are bounded; multi-part requests can require separate turns. Exact saved facts are rendered from the store rather than generated prose.
-- Web storage is browser-local; the private one-time import preserves existing data but is not ongoing native/web synchronization. The published Site was opened in the available signed-in browser session and a real rating query succeeded.
-- Xcode's diagnostic collector sometimes reports unavailable global `simctl`/debugger metadata because system xcode-select remains on Command Line Tools. Scripts explicitly select Xcode; build/test outcomes above are actual completed results.
+- Recover the Mac's Apple model service, then rerun `scripts/test-model-mac.sh`, `scripts/test-model-mac.sh scripts/conversation-integration-mac.swift`, and genuine web conversation checks. No account or distribution credentials are required for this blocker. No universal language-understanding claim is made; pending proposals and new semantic classifier still require that final integration regression.
+- Personal Team signing, physical installation, iPhone Safari/Home Screen, microphone permission/interruption and VoiceOver reading order remain unverified on hardware.
+- Actual AlarmKit authorization/delivery, recurrence, Focus/silent behavior, revocation and time-zone changes require an iPhone. Calendar events do not ring.
+- Browser storage is local to that browser; the private one-time import is not continuous native/web synchronization. No offline service worker.
+- Xcode's optional diagnostics collector may report missing global simctl/debugger metadata because xcode-select stays on Command Line Tools. The scripts explicitly select Xcode; completed build/test results are reported separately from these diagnostics.

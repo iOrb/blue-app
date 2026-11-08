@@ -10,51 +10,77 @@ struct AssistantDock: View {
     @FocusState private var focused: Bool
     @State private var dictation = DictationService()
     @State private var event: CalendarEvent?
+    @State private var deletionAction: (() async throws -> Void)?
+    @State private var reviewingDeletion = false
     var body: some View {
         @Bindable var assistant = assistant
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let result = assistant.result {
-                        resultView(result)
-                    } else {
-                        BlueCharacter(state: assistant.state).frame(maxWidth: .infinity).padding(.top, 40)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 24)
-            }.scrollDismissesKeyboard(.interactively)
-            ErrorLine(key: dictation.errorKey).padding(.horizontal, 24)
-            HStack(spacing: 8) {
-                TextField(
-                    l(dictation.recording ? "dictation.listening" : "assistant.placeholder"), text: $assistant.input
-                )
-                .focused($focused).submitLabel(.send).onSubmit(submit).accessibilityIdentifier("assistantInput")
-                QuietButton(
-                    key: dictation.recording ? "dictation.stop" : "dictation.start",
-                    symbol: dictation.recording ? "stop.circle.fill" : "mic"
-                ) {
-                    if dictation.recording {
-                        dictation.stop()
-                    } else {
-                        focused = false
-                        let prefix = assistant.input
-                        Task {
-                            await dictation.start(language: l.language) {
-                                assistant.input = prefix.isEmpty ? $0 : prefix + " " + $0
+            HStack(spacing: 10) {
+                BlueCharacter(state: assistant.state).frame(width: 46, height: 46).accessibilityHidden(true)
+                HStack(spacing: 4) {
+                    TextField(
+                        l(dictation.recording ? "dictation.listening" : "assistant.placeholder"), text: $assistant.input
+                    )
+                    .focused($focused).submitLabel(.send).onSubmit(submit).accessibilityIdentifier("assistantInput")
+                    QuietButton(
+                        key: dictation.recording ? "dictation.stop" : "dictation.start",
+                        symbol: dictation.recording ? "stop.circle.fill" : "mic"
+                    ) {
+                        if dictation.recording {
+                            dictation.stop()
+                        } else {
+                            focused = false
+                            let prefix = assistant.input
+                            Task {
+                                await dictation.start(language: l.language) {
+                                    assistant.input = prefix.isEmpty ? $0 : prefix + " " + $0
+                                }
                             }
                         }
+                    }.accessibilityIdentifier("assistantMicrophone")
+                    if assistant.busy {
+                        QuietButton(key: "cancel", symbol: "stop.circle") { assistant.cancel() }
+                    } else {
+                        QuietButton(key: "assistant.send", symbol: "arrow.up.circle.fill", action: submit).disabled(
+                            assistant.input.isEmpty
+                        ).accessibilityIdentifier("assistantSend")
                     }
-                }.accessibilityIdentifier("assistantMicrophone")
-                if assistant.busy {
-                    QuietButton(key: "cancel", symbol: "stop.circle") { assistant.cancel() }
-                } else {
-                    QuietButton(key: "assistant.send", symbol: "arrow.up.circle.fill", action: submit).disabled(
-                        assistant.input.isEmpty
-                    ).accessibilityIdentifier("assistantSend")
-                }
-            }.padding(.horizontal, 16).padding(.vertical, 8).background(.regularMaterial, in: Capsule())
-                .padding(.horizontal, 18).padding(.bottom, 12)
+                }.padding(.leading, 14).padding(.trailing, 6).padding(.vertical, 6).background(
+                    .regularMaterial, in: Capsule())
+            }.padding(.horizontal, 18).padding(.bottom, 20)
+            ErrorLine(key: dictation.errorKey).padding(.horizontal, 24)
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        ForEach(
+                            Array(assistant.history.dropLast(assistant.activePrompt == nil ? 1 : 0).enumerated()),
+                            id: \.offset
+                        ) { _, exchange in
+                            Text(exchange.user).foregroundStyle(.secondary).frame(
+                                maxWidth: .infinity, alignment: .trailing)
+                            MarkdownView(text: .constant(exchange.reply))
+                        }
+                        if let question = assistant.activePrompt ?? assistant.history.last?.user {
+                            Text(question).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        if let result = assistant.result { resultView(result) }
+                        if assistant.busy { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
+                        Color.clear.frame(height: 1).id("latest")
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 30)
+                }.scrollDismissesKeyboard(.interactively)
+                    .onChange(of: assistant.history) { _, _ in scroll.scrollTo("latest", anchor: .bottom) }
+            }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { BlueNavigation() }
+
+        .blueConfirmation(isPresented: $reviewingDeletion, title: l("delete.confirm")) {
+            let action = deletionAction
+            deletionAction = nil
+            Task {
+                do { try await action?() } catch {
+                    assistant.result = .message((error as? BlueError ?? .saveFailed).key)
+                }
+            }
+        }
         .onAppear { focused = navigation.assistantFocused }
         .onDisappear {
             dictation.stop()
@@ -74,7 +100,7 @@ struct AssistantDock: View {
         assistant.submit(store: store, alarms: alarms, language: l.language)
     }
     private func open(_ route: Route) {
-        navigation.path = [route]
+        navigation.open(route)
         navigation.assistantExpanded = false
     }
     @ViewBuilder private func resultView(_ result: AssistantResult) -> some View {
@@ -131,16 +157,11 @@ struct AssistantDock: View {
             }
         case .confirmAlarmDeletion(let id):
             Text(l("alarm.confirmDelete"))
-            Button(l("delete"), role: .destructive) {
-                Task {
-                    guard let alarm = store.state.alarms.first(where: { $0.id == id }) else { return }
-                    do {
-                        try await alarms.delete(alarm)
-                        assistant.result = .message("alarm.deleted")
-                    } catch { assistant.result = .message((error as? BlueError ?? .alarmFailed).key) }
-                }
-            }.frame(minHeight: 44)
-            Button(l("cancel")) { assistant.result = nil }.frame(minHeight: 44)
+            confirmation {
+                guard let alarm = store.state.alarms.first(where: { $0.id == id }) else { throw BlueError.missing }
+                try await alarms.delete(alarm)
+                assistant.result = .message("alarm.deleted")
+            }
         }
     }
     @ViewBuilder private func records(_ ids: [UUID], fields: [String] = []) -> some View {
@@ -163,7 +184,7 @@ struct AssistantDock: View {
                 if (fields.isEmpty || fields.contains("markdown")) && !l.text(record.markdown).isEmpty {
                     MarkdownView(text: .constant(l.text(record.markdown)))
                 }
-                Divider()
+
             }
         }
     }
@@ -176,7 +197,7 @@ struct AssistantDock: View {
                 } label: {
                     Text(l.text(note.title)).font(.title3.weight(.semibold)).frame(minHeight: 44)
                 }.buttonStyle(.plain)
-                MarkdownView(text: .constant(l.text(note.markdown)))
+                Text(l.text(note.markdown)).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -204,13 +225,17 @@ struct AssistantDock: View {
             }.buttonStyle(.plain)
         }
     }
-    private func confirmation(_ action: @escaping () throws -> Void) -> some View {
+    private func confirmation(_ action: @escaping () async throws -> Void) -> some View {
         HStack {
             Button(l("cancel")) { assistant.result = nil }.frame(minHeight: 44)
             Spacer()
-            Button(l("delete"), role: .destructive) {
-                do { try action() } catch { assistant.result = .message((error as? BlueError ?? .saveFailed).key) }
-            }.frame(minHeight: 44).accessibilityIdentifier("confirmDeletion")
+            Button(role: .destructive) {
+                deletionAction = action
+                reviewingDeletion = true
+            } label: {
+                Label(l("delete"), systemImage: "minus")
+            }
+            .frame(minHeight: 44).accessibilityIdentifier("confirmDeletion")
         }
     }
 }

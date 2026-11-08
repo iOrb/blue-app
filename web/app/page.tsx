@@ -6,12 +6,13 @@ import {
   List,
   CalendarDays,
   Settings2,
-  Trash2,
+  Minus,
+  ChevronLeft,
+  ArrowDown,
   ArrowUp,
   Mic,
   MicOff,
   LoaderCircle,
-  SlidersHorizontal,
   Download,
   ChevronRight,
 } from "lucide-react";
@@ -38,8 +39,12 @@ import {
   compatibleValue,
   safeLink,
 } from "./blue-model";
+import { type Exchange, validHistory } from "./blue-conversation";
 import { BlueMark, Symbol } from "./blue-icons";
 import {
+  ActionMenu,
+  DetailToolbar,
+  PlainBody,
   Sheet,
   Confirm,
   EditableText,
@@ -82,13 +87,14 @@ export default function Blue() {
     current = useRef(library),
     [ready, setReady] = useState(false),
     [language, setLanguage] = useState<Language>("en");
-  const [scope, setScope] = useState<Scope>("all"),
+  const [scope, setScope] = useState<Scope>("collections"),
     [collectionID, setCollectionID] = useState<string>(),
     [detail, setDetail] = useState<Detail>(),
     session = useRef<{ id: string; revision: number } | undefined>(undefined);
+  const collectionQueries = useRef<Record<string, Query>>({});
+  const collectionTitleInput = useRef<HTMLInputElement>(null), detailTitleInput = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useState(false),
     [search, setSearch] = useState(""),
-    [filters, setFilters] = useState(false),
     [query, setQuery] = useState<Query>({
       sortField: "title",
       ascending: true,
@@ -112,6 +118,10 @@ export default function Blue() {
     [result, setResult] = useState<Result>(),
     [chatError, setChatError] = useState(""),
     [resultSnapshot, setResultSnapshot] = useState("");
+  const [history, setHistory] = useState<Exchange[]>([]),
+    [activePrompt, setActivePrompt] = useState<string>(),
+    latestReply = useRef<HTMLDivElement>(null);
+  useEffect(() => { latestReply.current?.scrollIntoView({ block: "nearest" }); }, [history]);
   const [listening, setListening] = useState(false),
     recognition = useRef<any>(null),
     input = useRef<HTMLTextAreaElement>(null),
@@ -231,7 +241,6 @@ export default function Blue() {
     setCollectionID(undefined);
     setDetail(undefined);
     setSearch("");
-    setFilters(false);
     setChat(false);
     setQuery({ sortField: "title", ascending: true, filters: [] });
   };
@@ -241,7 +250,7 @@ export default function Blue() {
     setScope("collections");
     setDetail(undefined);
     setChat(false);
-    setQuery({ sortField: "title", ascending: true, filters: [] });
+    setQuery(collectionQueries.current[id] || { sortField: "title", ascending: true, filters: [] });
     setSearch("");
   };
   const openDetail = (kind: "note" | "item", id: string) => {
@@ -523,12 +532,14 @@ export default function Blue() {
     setChatError("");
     const snapshot = JSON.stringify(current.current),
       sent = prompt.trim();
+    setActivePrompt(sent);
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: sent,
+          history,
           language,
           library: current.current,
           collectionID: collection?.id ?? conversationTarget.current.collection,
@@ -547,12 +558,13 @@ export default function Blue() {
       const data = (await response.json()) as {
         library: Library;
         result: Result;
+        history: Exchange[];
         error?: string;
       };
       if (!response.ok) throw new Error(data.error);
       if (JSON.stringify(current.current) !== snapshot)
         throw new Error("stale");
-      if (!validLibrary(data.library)) throw new Error("invalid");
+      if (!validLibrary(data.library) || !validHistory(data.history)) throw new Error("invalid");
       if (JSON.stringify(data.library) !== snapshot && !commit(data.library))
         throw new Error("storage");
       const selection = data.result.selection?._0;
@@ -569,6 +581,12 @@ export default function Blue() {
         conversationTarget.current = { event: eventIDs[0] };
       else if (resultCollection)
         conversationTarget.current = { collection: resultCollection };
+      if (data.result.collectionView) {
+        const view = data.result.collectionView;
+        collectionQueries.current[view._0] = view._1;
+        if (collectionID === view._0) setQuery(view._1);
+      }
+      setHistory(data.history);
       setResult(data.result);
       setResultSnapshot(JSON.stringify(current.current));
       setPrompt("");
@@ -586,6 +604,7 @@ export default function Blue() {
       );
     } finally {
       setBusy(false);
+      setActivePrompt(undefined);
     }
   }
   function dictate() {
@@ -708,6 +727,7 @@ export default function Blue() {
     };
     if (commit(next)) setResult({ collection: { _0: pending.proposed.id } });
   };
+  const detailBlue = <button className="blue-launcher detail-blue" aria-label={t("Talk to Blue", "Hablar con Blue")} onClick={() => { setDetail(undefined); setChat(true); }}><BlueMark small /></button>;
   const collections = library.collections.filter(
     (c) =>
       !search ||
@@ -725,24 +745,10 @@ export default function Blue() {
   return (
     <>
       <div className="app-shell">
-        <header className="app-header">
-          <button
-            className="brand"
-            aria-label={t("All of Blue", "Todo Blue")}
-            onClick={() => navigate("all")}
-          >
-            <span className="brand-spark">✳</span> Blue
-          </button>
-          <div className="header-actions">
-            <button
-              className="icon-button"
-              aria-label={t("Settings", "Ajustes")}
-              onClick={() => setSettings(true)}
-            >
-              <Settings2 size={19} />
-            </button>
-          </div>
-        </header>
+        {collection && <header className="topbar collection-topbar">
+          <button className="icon-button" aria-label={t("Back", "Volver")} onClick={() => navigate("collections")}><ChevronLeft size={24} /></button>
+          <ActionMenu language={language} rename={() => { collectionTitleInput.current?.scrollIntoView({ block: "center" }); collectionTitleInput.current?.focus(); }} remove={() => requestDelete("collection", collection.id, text(collection.title, language))} />
+        </header>}
         {notice && (
           <div className="notice" role="alert" onClick={() => setNotice("")}>
             {notice}
@@ -753,151 +759,26 @@ export default function Blue() {
             <LoaderCircle className="spin" />
           ) : (
             <>
-              <div className="view-heading">
-                {collection ? (
-                  <EditableText
-                    key={collection.id}
-                    value={text(collection.title, language)}
-                    label={t("Collection title", "Título de colección")}
-                    large
-                    save={(s) =>
-                      changeCollection(collection, { title: userText(s) })
-                    }
-                  />
-                ) : (
-                  <h1>
-                    {scope === "all"
-                      ? t("Your space", "Tu espacio")
-                      : scope === "notes"
-                        ? t("Notes", "Notas")
-                        : scope === "collections"
-                          ? t("Collections", "Colecciones")
-                          : t("Calendar", "Calendario")}
-                  </h1>
-                )}
-                <div className="header-actions">
-                  {collection && (
-                    <>
-                      <button
-                        className="icon-button"
-                        aria-label={t("Filters", "Filtros")}
-                        onClick={() => setFilters(true)}
-                      >
-                        <SlidersHorizontal size={21} />
-                      </button>
-                      <button
-                        className="icon-button danger"
-                        aria-label={t(
-                          "Delete collection",
-                          "Eliminar colección",
-                        )}
-                        onClick={() =>
-                          requestDelete(
-                            "collection",
-                            collection.id,
-                            text(collection.title, language),
-                          )
-                        }
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </>
-                  )}
-                  <button
-                    className="round-dark"
-                    aria-label={
-                      scope === "calendar"
-                        ? t("New event", "Nuevo evento")
-                        : t("Add", "Añadir")
-                    }
-                    onClick={() =>
-                      collection
-                        ? addItem()
-                        : scope === "calendar"
-                          ? setEventEditor({ day: selectedDay })
-                          : scope === "notes"
-                            ? addNote()
-                            : scope === "collections"
-                              ? addCollection()
-                              : setCreating(true)
-                    }
-                  >
-                    <Plus size={23} />
-                  </button>
-                </div>
+              <div className={`view-heading ${collection ? "collection-hero" : ""}`}>
+                {collection ? <div>
+                  <EditableText inputRef={collectionTitleInput} key={collection.id} value={text(collection.title, language)} label={t("Collection title", "Título de colección")} large save={(value) => changeCollection(collection, { title: userText(value) })} />
+                  <p className="collection-count">{library.records.filter((r) => r.collectionID === collection.id).length} {t("items", "elementos")}</p>
+                </div> : <h1>{scope === "notes" ? t("Notes", "Notas") : scope === "calendar" ? t("Calendar", "Calendario") : t("Collections", "Colecciones")}</h1>}
+                {!collection && <div className="header-actions">
+                  <button className="icon-button" aria-label={t("Settings", "Ajustes")} onClick={() => setSettings(true)}><Settings2 size={20} /></button>
+                  <button className="round-dark" aria-label={scope === "calendar" ? t("New event", "Nuevo evento") : t("Add", "Añadir")} onClick={() => scope === "calendar" ? setEventEditor({ day: selectedDay }) : scope === "notes" ? addNote() : addCollection()}><Plus size={22} /></button>
+                </div>}
               </div>
 
               {collection ? (
                 <>
-                  <div className="collection-filters">
-                    {fields(collection)
-                      .filter((f) => boolean(f) || f.kind === "status")
-                      .map((f) => (
-                        <FieldControl
-                          key={f.id}
-                          field={f}
-                          language={language}
-                          filter
-                          stored={
-                            query.filters.find((x) => x.fieldID === f.id)?.flag
-                              ? { flag: { _0: true } }
-                              : query.filters.find((x) => x.fieldID === f.id)
-                                    ?.text
-                                ? {
-                                    option: {
-                                      _0: query.filters.find(
-                                        (x) => x.fieldID === f.id,
-                                      )!.text!,
-                                    },
-                                  }
-                                : undefined
-                          }
-                          save={(v) =>
-                            setQuery((q) => ({
-                              ...q,
-                              filters: [
-                                ...q.filters.filter((x) => x.fieldID !== f.id),
-                                ...(v?.flag?._0
-                                  ? [{ fieldID: f.id, flag: true }]
-                                  : v?.option
-                                    ? [{ fieldID: f.id, text: v.option._0 }]
-                                    : []),
-                              ],
-                            }))
-                          }
-                        />
-                      ))}
-                    {query.filters
-                      .filter(
-                        (f) =>
-                          f.flag === undefined &&
-                          !collection.fields.find(
-                            (x) => x.id === f.fieldID && x.kind === "status",
-                          ),
-                      )
-                      .map((f) => (
-                        <button
-                          className="active-filter"
-                          key={f.fieldID}
-                          aria-label={t("Remove filter", "Quitar filtro")}
-                          onClick={() =>
-                            setQuery((q) => ({
-                              ...q,
-                              filters: q.filters.filter(
-                                (x) => x.fieldID !== f.fieldID,
-                              ),
-                            }))
-                          }
-                        >
-                          <Symbol
-                            name={
-                              collection.fields.find((x) => x.id === f.fieldID)
-                                ?.icon || "line.3.horizontal.decrease"
-                            }
-                          />
-                          {f.minimum !== undefined ? "≥ " + f.minimum : f.text}
-                        </button>
-                      ))}
+                  <div className="collection-sort">
+                    <span>{t("Sort by", "Ordenar por")}</span>
+                    <button aria-label={t("Toggle sort direction", "Cambiar sentido del orden")} onClick={() => setQuery((q) => ({ ...q, ascending: !q.ascending }))}>
+                      {collection.fields.find((f) => f.id === query.sortField) ? text(collection.fields.find((f) => f.id === query.sortField)!.label, language) : t("Title", "Título")}
+                      {query.ascending ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
+                    </button>
+                    <button className="icon-button add-item" aria-label={t("Add item", "Añadir elemento")} onClick={addItem}><Plus size={22} /></button>
                   </div>
                   <div className="item-list">
                     {queryItems(
@@ -984,7 +865,7 @@ export default function Blue() {
           )}
         </main>
       </div>
-      <nav className="floating-nav" aria-label={t("Sections", "Secciones")}>
+      {!chat && <div className="navigation-dock">{!collection && <nav className="floating-nav" aria-label={t("Sections", "Secciones")}>
         {(["notes", "collections", "calendar"] as const).map((s) => {
           const Icon =
               s === "notes"
@@ -1011,97 +892,25 @@ export default function Blue() {
             </button>
           );
         })}
+      </nav>}
         <button
-          className={`blue-tab ${chat ? "selected" : ""}`}
+          className="blue-launcher"
           aria-label={t("Talk to Blue", "Hablar con Blue")}
           onClick={() => setChat(!chat)}
         >
           <BlueMark small />
         </button>
-      </nav>
-      {item && (
-        <Sheet
-          title={item.title}
-          heading={
-            <EditableText
-              value={item.title}
-              label={t("Title", "Título")}
-              large
-              save={(title) => changeItem(item, { title })}
-            />
-          }
-          close={() => setDetail(undefined)}
-        >
-          <div className="detail-properties">
-            {controls(
-              item,
-              library.collections.find((c) => c.id === item.collectionID)!,
-              undefined,
-              true,
-            )}
-          </div>
-          <MarkdownBody
-            value={text(item.markdown, language)}
-            language={language}
-            save={(body) => changeItem(item, { markdown: userText(body) })}
-          />
-          {item.sources?.map((source) => (
-            <section className="source-facts" key={source.url}>
-              <p>{source.summary}</p>
-              <a
-                className="source-link"
-                href={safeLink(source.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {source.title}
-              </a>
-            </section>
-          ))}
-          <button
-            className="icon-button danger"
-            aria-label={t("Delete item", "Eliminar elemento")}
-            onClick={() => requestDelete("record", item.id, item.title)}
-          >
-            <Trash2 size={20} />
-          </button>
-        </Sheet>
-      )}
-      {note && (
-        <Sheet
-          title={text(note.title, language)}
-          heading={
-            <EditableText
-              value={text(note.title, language)}
-              label={t("Title", "Título")}
-              large
-              save={(title) => changeNote(note, { title: userText(title) })}
-            />
-          }
-          close={() => setDetail(undefined)}
-        >
-          <FieldControl
-            field={favoriteField}
-            stored={{ flag: { _0: !!note.favorite } }}
-            language={language}
-            save={(v) => changeNote(note, { favorite: v?.flag?._0 || false })}
-          />
-          <MarkdownBody
-            value={text(note.markdown, language)}
-            language={language}
-            save={(body) => changeNote(note, { markdown: userText(body) })}
-          />
-          <button
-            className="icon-button danger"
-            aria-label={t("Delete note", "Eliminar nota")}
-            onClick={() =>
-              requestDelete("note", note.id, text(note.title, language))
-            }
-          >
-            <Trash2 size={20} />
-          </button>
-        </Sheet>
-      )}
+      </div>}
+      {item && <Sheet title={item.title} className="item-sheet" footer={detailBlue} close={() => setDetail(undefined)} heading={<DetailToolbar language={language} close={() => setDetail(undefined)} rename={() => detailTitleInput.current?.focus()} remove={() => requestDelete("record", item.id, item.title)} />}>
+        <EditableText inputRef={detailTitleInput} value={item.title} label={t("Title", "Título")} large save={(title) => changeItem(item, { title })} />
+        <div className="detail-properties">{controls(item, library.collections.find((c) => c.id === item.collectionID)!, undefined, true)}</div>
+        <PlainBody value={text(item.markdown, language)} language={language} save={(body) => changeItem(item, { markdown: userText(body) })} />
+        {item.sources?.map((source) => <section className="source-facts" key={source.url}><p>{source.summary}</p><a className="source-link" href={safeLink(source.url)} target="_blank" rel="noopener noreferrer">{source.title}</a></section>)}
+      </Sheet>}
+      {note && <Sheet title={text(note.title, language)} className="note-sheet" footer={detailBlue} close={() => setDetail(undefined)} heading={<DetailToolbar language={language} close={() => setDetail(undefined)} rename={() => detailTitleInput.current?.focus()} remove={() => requestDelete("note", note.id, text(note.title, language))} />}>
+        <EditableText inputRef={detailTitleInput} value={text(note.title, language)} label={t("Title", "Título")} large save={(title) => changeNote(note, { title: userText(title) })} />
+        <PlainBody value={text(note.markdown, language)} language={language} save={(body) => changeNote(note, { markdown: userText(body) })} />
+      </Sheet>}
       {creating && (
         <Sheet title={t("Add", "Añadir")} close={() => setCreating(false)}>
           <button className="menu-line" onClick={addNote}>
@@ -1147,93 +956,6 @@ export default function Blue() {
           close={() => setEventEditor(undefined)}
         />
       )}
-      {filters && collection && (
-        <Sheet
-          title={t("Filter & sort", "Filtrar y ordenar")}
-          close={() => setFilters(false)}
-        >
-          <input
-            className="search-input"
-            aria-label={t("Search collection", "Buscar en colección")}
-            placeholder={t("Search…", "Buscar…")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="sort-options">
-            {[
-              { id: "title", label: userText(t("Title", "Título")) },
-              ...collection.fields,
-            ].map((f) => (
-              <button
-                className={query.sortField === f.id ? "selected" : ""}
-                key={f.id}
-                onClick={() =>
-                  setQuery((q) => ({
-                    ...q,
-                    sortField: f.id,
-                    ascending: q.sortField === f.id ? !q.ascending : true,
-                  }))
-                }
-              >
-                {text(f.label, language)}{" "}
-                {query.sortField === f.id ? (query.ascending ? "↑" : "↓") : ""}
-              </button>
-            ))}
-          </div>
-          <div className="detail-properties">
-            {fields(collection).map((f) => {
-              const active = query.filters.find((x) => x.fieldID === f.id);
-              const stored: Value | undefined = active?.flag
-                ? { flag: { _0: true } }
-                : active?.minimum !== undefined
-                  ? { number: { _0: active.minimum } }
-                  : active?.after !== undefined
-                    ? { date: { _0: active.after } }
-                    : active?.text
-                      ? f.kind === "status"
-                        ? { option: { _0: active.text } }
-                        : { text: { _0: active.text } }
-                      : undefined;
-              return (
-                <FieldControl
-                  key={f.id}
-                  field={f}
-                  language={language}
-                  filter
-                  stored={stored}
-                  save={(v) =>
-                    setQuery((q) => ({
-                      ...q,
-                      filters: [
-                        ...q.filters.filter((x) => x.fieldID !== f.id),
-                        ...(v?.flag?._0
-                          ? [{ fieldID: f.id, flag: true }]
-                          : v?.number
-                            ? [{ fieldID: f.id, minimum: v.number._0 }]
-                            : v?.date
-                              ? [{ fieldID: f.id, after: v.date._0 }]
-                              : v?.option
-                                ? [{ fieldID: f.id, text: v.option._0 }]
-                                : v?.text
-                                  ? [{ fieldID: f.id, text: v.text._0 }]
-                                  : []),
-                      ],
-                    }))
-                  }
-                />
-              );
-            })}
-          </div>
-          {query.filters.length > 0 && (
-            <button
-              className="plain"
-              onClick={() => setQuery((q) => ({ ...q, filters: [] }))}
-            >
-              {t("Clear filters", "Quitar filtros")}
-            </button>
-          )}
-        </Sheet>
-      )}
       {chat && (
         <Sheet
           title="Blue"
@@ -1241,9 +963,18 @@ export default function Blue() {
             setChat(false);
             recognition.current?.stop();
           }}
-          footer={composer}
+          modal
+          className="assistant-sheet"
+          heading={<div className="assistant-composer"><BlueMark small />{composer}</div>}
         >
-          <div className="assistant-result" aria-live="polite">
+          <div className="conversation-history">
+            {history.slice(0, activePrompt ? history.length : -1).map((exchange, index) => <div className="conversation-turn" key={index}>
+              <p className="user-message">{exchange.user}</p>
+              <MarkdownBody language={language} value={exchange.reply} readOnly save={() => {}} />
+            </div>)}
+          </div>
+          <div ref={latestReply} className="assistant-result" aria-live="polite">
+            {(activePrompt || history.at(-1)?.user) && <p className="user-message">{activePrompt || history.at(-1)?.user}</p>}
             {busy ? <LoaderCircle className="spin" /> : null}
             {chatError && <p role="alert">{chatError}</p>}
             {(selection?.answer || result?.answer?._0) && (
@@ -1277,11 +1008,7 @@ export default function Blue() {
                   >
                     {text(n.title, language)}
                   </button>
-                  <MarkdownBody
-                    language={language}
-                    value={text(n.markdown, language)}
-                    save={(body) => changeNote(n, { markdown: userText(body) })}
-                  />
+                  <p className="plain-note-result">{text(n.markdown, language)}</p>
                 </section>
               ) : null;
             })}
@@ -1347,7 +1074,7 @@ export default function Blue() {
                   <button onClick={() => setResult(undefined)}>
                     {t("Keep", "Conservar")}
                   </button>
-                  <button className="danger-button" onClick={confirmSchema}>
+                  <button className="danger-button" onClick={() => setDeletion({ title: result.confirmCollectionChange!._0.original.fields.filter((f) => !result.confirmCollectionChange!._0.proposed.fields.some((x) => x.id === f.id)).map((f) => text(f.label, language)).join(", "), perform: () => { confirmSchema(); setDeletion(undefined); } })}>
                     {t("Delete", "Eliminar")}
                   </button>
                 </div>

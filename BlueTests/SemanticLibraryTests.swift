@@ -4,6 +4,37 @@ import Testing
 @testable import Blue
 
 @MainActor struct SemanticLibraryTests {
+    @Test func conversationKeepsOnlyRecentBoundedExchangesWithoutChangingTheLibrary() throws {
+        let store = try LibraryStore(inMemory: true, seed: false)
+        let before = store.state
+        let exchanges = (0..<7).map { index in
+            AssistantExchange(
+                user: "\(index)" + String(repeating: "🗿", count: 900), reply: String(repeating: "é", count: 1200))
+        }
+        let assistant = AssistantService()
+        assistant.restoreConversation(exchanges)
+        #expect(assistant.history.count == 4)
+        #expect(assistant.history.first?.user.hasPrefix("3") == true)
+        #expect(assistant.history.allSatisfy { $0.user.count == 800 && $0.reply.count == 1000 })
+        let encoded = try JSONEncoder().encode(assistant.history)
+        #expect(try JSONDecoder().decode([AssistantExchange].self, from: encoded) == assistant.history)
+        #expect(store.state == before)
+    }
+    @Test func conversationPreservesExactProposalAndRejectsOversizedDrafts() throws {
+        let proposal = AssistantNoteProposal(
+            noteID: UUID(), revision: 3, title: nil, markdown: "# Trip\n\nA shorter paragraph.")
+        let exchange = AssistantExchange(
+            user: "Propose a shorter paragraph", reply: "A shorter paragraph.", noteProposal: proposal)
+        #expect(AssistantExchange.bounded([exchange]).first?.noteProposal == proposal)
+        let encoded = try JSONEncoder().encode(exchange)
+        #expect(try JSONDecoder().decode(AssistantExchange.self, from: encoded).noteProposal == proposal)
+        var invalid = exchange
+        invalid.noteProposal?.markdown = String(repeating: "x", count: 20001)
+        #expect(AssistantExchange.bounded([invalid]).first?.noteProposal == nil)
+        invalid.noteProposal = proposal
+        invalid.noteProposal?.revision = -1
+        #expect(AssistantExchange.bounded([invalid]).first?.noteProposal == nil)
+    }
     private func context(_ store: LibraryStore, writes: Bool = true) -> ToolContext {
         let context = ToolContext(
             store: store, alarms: AlarmService(store: store, scheduler: FakeScheduler()), language: .spanish,

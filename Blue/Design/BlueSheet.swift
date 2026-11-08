@@ -6,6 +6,8 @@ struct BlueSheet<Content: View>: View {
     var dismiss: () -> Void
     @ViewBuilder var content: () -> Content
     @State private var offset: CGFloat = 0
+    @State private var presentationID = UUID()
+    @Environment(NavigationState.self) private var navigation
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
@@ -17,7 +19,7 @@ struct BlueSheet<Content: View>: View {
                         if !title.isEmpty {
                             Text(title).font(.title2.weight(.semibold)).frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    }.padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 18)
+                    }.padding(.horizontal, 24).padding(.top, 12).padding(.bottom, title.isEmpty ? 4 : 14)
                         .contentShape(Rectangle())
                         .gesture(
                             DragGesture().onChanged { offset = max(0, $0.translation.height) }
@@ -38,14 +40,17 @@ struct BlueSheet<Content: View>: View {
                 .accessibilityAction(.escape, dismiss)
             }
         }
+        .onAppear { navigation.presentations.insert(presentationID) }
+        .onDisappear { navigation.presentations.remove(presentationID) }
     }
 }
 
 extension View {
     func blueSheet<Content: View>(
-        isPresented: Binding<Bool>, title: String, @ViewBuilder content: @escaping () -> Content
+        isPresented: Binding<Bool>, title: String, onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        fullScreenCover(isPresented: isPresented) {
+        fullScreenCover(isPresented: isPresented, onDismiss: onDismiss) {
             BlueSheet(title: title, dismiss: { isPresented.wrappedValue = false }, content: content)
                 .presentationBackground(.clear)
         }
@@ -83,5 +88,101 @@ struct EditableMarkdown: View {
                 }
             }
         }.onChange(of: focused) { _, value in if !value { editing = false } }
+    }
+}
+
+struct BlueConfirmation: View {
+    @State private var presentationID = UUID()
+    @Environment(NavigationState.self) private var navigation
+    let title: String
+    var cancel: () -> Void
+    var confirm: () -> Void
+    @Environment(Localizer.self) private var l
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.25).ignoresSafeArea().onTapGesture(perform: cancel)
+            VStack(alignment: .leading, spacing: 24) {
+                Text(title).font(.title2.weight(.semibold))
+                HStack {
+                    Button(l("cancel"), action: cancel).frame(minHeight: 44)
+                    Spacer()
+                    Button(role: .destructive, action: confirm) { Label(l("delete"), systemImage: "minus") }.frame(
+                        minHeight: 44
+                    )
+                    .accessibilityIdentifier("confirmDelete")
+                }
+            }.padding(28).frame(maxWidth: 350).background(
+                Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 28)
+            ).padding(24)
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: cancel) {
+                        Image(systemName: "xmark").frame(width: 48, height: 48).background(
+                            .regularMaterial, in: Circle())
+                    }.accessibilityLabel(l("close")).accessibilityIdentifier("closeConfirmation")
+                }
+                Spacer()
+            }.padding(20)
+        }.accessibilityAction(.escape, cancel)
+            .onAppear { navigation.presentations.insert(presentationID) }
+            .onDisappear { navigation.presentations.remove(presentationID) }
+    }
+}
+private struct BlueConfirmationModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let title: String
+    var confirm: () -> Void
+    @State private var accepted = false
+    func body(content: Content) -> some View {
+        content.fullScreenCover(
+            isPresented: $isPresented,
+            onDismiss: {
+                if accepted {
+                    accepted = false
+                    confirm()
+                }
+            },
+            content: {
+                BlueConfirmation(
+                    title: title, cancel: { isPresented = false },
+                    confirm: {
+                        accepted = true
+                        isPresented = false
+                    }
+                ).presentationBackground(.clear)
+            })
+    }
+}
+extension View {
+    func blueConfirmation(isPresented: Binding<Bool>, title: String, confirm: @escaping () -> Void) -> some View {
+        modifier(BlueConfirmationModifier(isPresented: isPresented, title: title, confirm: confirm))
+    }
+}
+struct DetailHeader<Options: View>: View {
+    var close: () -> Void
+    @ViewBuilder var options: () -> Options
+    @Environment(Localizer.self) private var l
+    var body: some View {
+        HStack {
+            QuietButton(key: "back", symbol: "chevron.down", action: close).accessibilityIdentifier("detailBack")
+            Spacer()
+            Menu {
+                options()
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 44, height: 44)
+            }
+            .accessibilityLabel(l("options")).accessibilityIdentifier("detailOptions")
+        }.padding(.horizontal, 16)
+    }
+}
+struct PlainNoteBody: View {
+    @Binding var text: String
+    @Environment(Localizer.self) private var l
+    var identifier = "noteBody"
+    var body: some View {
+        TextField(l("note.markdown"), text: $text, axis: .vertical)
+            .lineLimit(8...1000).font(.body).frame(maxWidth: .infinity, alignment: .topLeading)
+            .accessibilityIdentifier(identifier)
     }
 }

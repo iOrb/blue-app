@@ -351,3 +351,24 @@ test("validates shared indicator metadata and keeps only type-compatible values 
     false,
   );
 });
+
+// Conversation transport is bounded independently from the saved library.
+import { validHistory } from "./blue-conversation.ts";
+test("conversation history rejects malformed or oversized messages", () => {
+  assert.equal(validHistory([{ user: "hola", reply: "¡Hola!" }]), true);
+  assert.equal(validHistory([{ user: "🗿".repeat(800), reply: "" }]), true);
+  assert.equal(validHistory([{ user: "x".repeat(801), reply: "" }]), false);
+  assert.equal(validHistory([{ user: "", reply: "x".repeat(1001) }]), false);
+  assert.equal(validHistory(Array(5).fill({ user: "hola", reply: "hola" })), false);
+  assert.equal(validHistory([{ user: {}, reply: "" }]), false);
+  assert.equal(validHistory([null]), false);
+});
+
+test("unsaved note proposals carry bounded content and an exact revision", () => {
+  const proposal = { noteID: uid(), revision: 2, markdown: "Shorter text." };
+  assert.equal(validHistory([{ user: "Shorten this", reply: "Shorter text.", noteProposal: proposal }]), true);
+  assert.equal(validHistory([{ user: "", reply: "", noteProposal: { ...proposal, revision: -1 } }]), false);
+  assert.equal(validHistory([{ user: "", reply: "", noteProposal: { ...proposal, markdown: "x".repeat(20001) } }]), false);
+  assert.equal(validHistory([{ user: "", reply: "", noteProposal: { ...proposal, noteID: "guess" } }]), false);
+  assert.equal(validHistory([{ user: "👩‍👩‍👧‍👧".repeat(800), reply: "" }]), true);
+});

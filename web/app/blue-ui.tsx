@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -14,6 +14,9 @@ import {
   Type,
   Tag,
   Minus,
+  X,
+  ChevronDown,
+  Ellipsis,
 } from "lucide-react";
 import {
   type Field,
@@ -33,8 +36,12 @@ export function Sheet({
   close,
   footer,
   heading,
+  modal = true,
+  className = "",
 }: {
   title: string;
+  modal?: boolean;
+  className?: string;
   heading?: ReactNode;
   children: ReactNode;
   close: () => void;
@@ -63,9 +70,9 @@ export function Sheet({
       }}
     >
       <section
-        className="sheet"
+        className={`sheet ${className}`}
         role="dialog"
-        aria-modal="false"
+        aria-modal={modal}
         aria-label={title}
         tabIndex={-1}
         ref={panel}
@@ -100,7 +107,7 @@ export function Sheet({
               ...(panel.current?.querySelectorAll<HTMLElement>(
                 'button:not([disabled]), input, textarea, a[href], [tabindex="0"]',
               ) || []),
-              ...document.querySelectorAll<HTMLElement>(".floating-nav button"),
+              ...(modal ? [] : document.querySelectorAll<HTMLElement>(".navigation-dock button")),
             ];
             if (nodes?.length) {
               const first = nodes[0],
@@ -125,7 +132,7 @@ export function Sheet({
           onPointerDown={(e) => {
             if (
               e.pointerType === "mouse" &&
-              !(e.target as HTMLElement).closest("input,button")
+              !(e.target as HTMLElement).closest("input,textarea,button")
             ) {
               start.current = { y: e.clientY, allowed: true };
               e.currentTarget.setPointerCapture(e.pointerId);
@@ -163,27 +170,63 @@ export function Confirm({
   confirm: () => void;
   cancel: () => void;
 }) {
-  return (
-    <Sheet title={words(language, "Delete?", "¿Eliminar?")} close={cancel}>
-      <p className="confirmation-copy">{title}</p>
-      <div className="confirmation-actions">
-        <button className="plain" onClick={cancel}>
-          {words(language, "Keep", "Conservar")}
-        </button>
-        <button className="danger-button" onClick={confirm}>
-          {words(language, "Delete", "Eliminar")}
-        </button>
-      </div>
-    </Sheet>
-  );
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panel.current?.querySelector<HTMLButtonElement>(".plain")?.focus();
+    return () => { document.body.style.overflow = overflow; previous?.focus(); };
+  }, []);
+  return <div className="confirmation-shade" ref={panel} onKeyDown={(e) => {
+    if (e.key === "Escape") { e.stopPropagation(); cancel(); }
+    if (e.key === "Tab") {
+      const buttons = Array.from(panel.current?.querySelectorAll<HTMLButtonElement>("button") || []);
+      const first = buttons[0], last = buttons.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  }} onClick={(e) => { if (e.target === e.currentTarget) cancel(); }}>
+    <button className="modal-close" aria-label={words(language, "Close", "Cerrar")} onClick={cancel}><X size={22} /></button>
+    <section className="confirmation-modal" role="alertdialog" aria-modal="true" aria-label={words(language, "Delete?", "¿Eliminar?")} onKeyDown={(e) => { if (e.key === "Escape") cancel(); }}>
+      <h2>{words(language, "Delete?", "¿Eliminar?")}</h2><p>{title}</p>
+      <div className="confirmation-actions"><button className="plain" autoFocus onClick={cancel}>{words(language, "Keep", "Conservar")}</button><button className="danger-button" onClick={confirm}><Minus size={18} />{words(language, "Delete", "Eliminar")}</button></div>
+    </section>
+  </div>;
 }
+export function ActionMenu({ language, rename, remove }: { language: Language; rename?: () => void; remove: () => void }) {
+  const [open, setOpen] = useState(false), panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => { if (!panel.current?.contains(e.target as Node)) setOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open]);
+  return <div className="action-menu" ref={panel}>
+    <button className="icon-button" aria-label={words(language, "Options", "Opciones")} aria-expanded={open} onClick={() => setOpen(!open)}><Ellipsis size={24} /></button>
+    {open && <div className="options-popover" role="menu">
+      {rename && <button role="menuitem" onClick={() => { setOpen(false); rename(); }}>{words(language, "Rename", "Cambiar nombre")}</button>}
+      <button role="menuitem" className="danger" onClick={() => { setOpen(false); remove(); }}><Minus size={18} />{words(language, "Delete", "Eliminar")}</button>
+    </div>}
+  </div>;
+}
+export function DetailToolbar({ language, close, rename, remove }: { language: Language; close: () => void; rename: () => void; remove: () => void }) {
+  return <div className="detail-toolbar"><button className="icon-button" aria-label={words(language, "Back", "Volver")} onClick={close}><ChevronDown size={24} /></button><ActionMenu language={language} rename={rename} remove={remove} /></div>;
+}
+export function PlainBody({ value, save, language }: { value: string; save: (s: string) => void; language: Language }) {
+  return <textarea className="plain-note-body" aria-label={words(language, "Text", "Texto")} value={value} maxLength={20000} onChange={(e) => save(e.target.value)} rows={10} />;
+}
+
 export function EditableText({
   value: original,
   save,
   label,
   large = false,
   placeholder = "",
+  inputRef,
 }: {
+  inputRef?: Ref<HTMLInputElement>;
   value: string;
   save: (s: string) => void;
   label: string;
@@ -197,6 +240,7 @@ export function EditableText({
   }, [original]);
   return (
     <input
+      ref={inputRef}
       className={large ? "inline-title" : "inline-text"}
       value={draft}
       maxLength={240}

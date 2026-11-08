@@ -70,6 +70,7 @@ import Network
             if let id = request.previousRecord { assistant.selectRecord(id) }
             if let id = request.noteID { assistant.selectNote(id) }
             if let id = request.eventID { assistant.selectEvent(id) }
+            assistant.restoreConversation(request.history ?? [])
             assistant.input = request.prompt
             assistant.submit(store: store, alarms: AlarmService(), language: request.language)
             let deadline = ContinuousClock.now.advanced(by: .seconds(85))
@@ -82,7 +83,7 @@ import Network
                 if ContinuousClock.now > deadline { assistant.cancel(); throw BlueError.cancelled }
                 try await Task.sleep(for: .milliseconds(60))
             }
-            let response = ModelBridgeResponse(library: store.state, result: assistant.result ?? .message("assistant.clarify"))
+            let response = ModelBridgeResponse(library: store.state, result: assistant.result ?? .message("assistant.clarify"), history: assistant.history)
             reply(connection, code: 200, body: try JSONEncoder().encode(response))
         } catch { FileHandle.standardError.write(Data("MODEL_REQUEST_FAILED=\(type(of: error))\n".utf8)); reply(connection, code: 500, body: Data()) }
     }

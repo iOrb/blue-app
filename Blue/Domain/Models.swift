@@ -343,3 +343,25 @@ enum Validation {
         guard value.count <= 240 else { throw BlueError.invalidValue }
     }
 }
+
+/// Ephemeral conversation context. Never persisted with the user's library or logged.
+struct AssistantExchange: Codable, Equatable, Sendable {
+    var user: String
+    var reply: String
+    var noteProposal: AssistantNoteProposal? = nil
+    static func bounded(_ exchanges: [Self]) -> [Self] {
+        exchanges.suffix(4).map {
+            Self(
+                user: String($0.user.prefix(800)), reply: String($0.reply.prefix(1000)),
+                noteProposal: $0.noteProposal?.isValid == true ? $0.noteProposal : nil)
+        }
+    }
+}
+
+struct AssistantNoteProposal: Codable, Equatable, Sendable {
+    var noteID: UUID
+    var revision: Int
+    var title: String?
+    var markdown: String
+    var isValid: Bool { revision >= 0 && (title?.count ?? 0) <= 240 && markdown.count <= 20000 }
+}
