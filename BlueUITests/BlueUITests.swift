@@ -2,11 +2,35 @@ import UIKit
 import XCTest
 
 final class BlueUITests: XCTestCase {
+    private enum TabItem {
+        case notes, collections, calendar, blue
+
+        var names: [String] {
+            switch self {
+            case .notes: ["Notes", "Notas"]
+            case .collections: ["Collections", "Colecciones"]
+            case .calendar: ["Calendar", "Calendario"]
+            case .blue: ["Tell Blue", "Cuéntaselo a Blue"]
+            }
+        }
+    }
+    @MainActor private func tab(_ item: TabItem, in app: XCUIApplication) -> XCUIElement {
+        app.tabBars.firstMatch.buttons.matching(NSPredicate(format: "label IN %@", item.names)).firstMatch
+    }
+    @MainActor private func assertHeaderAligned(_ app: XCUIApplication, with action: String) {
+        let title = app.staticTexts["sectionTitle"]
+        let settings = app.buttons["settingsButton"]
+        XCTAssertTrue(title.exists)
+        XCTAssertLessThan(title.frame.minX, settings.frame.minX)
+        XCTAssertEqual(title.frame.midY, settings.frame.midY, accuracy: 2)
+        XCTAssertEqual(title.frame.midY, app.buttons[action].frame.midY, accuracy: 2)
+    }
+
     @MainActor private func launch(reset: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest", "--test-assistant"] + (reset ? ["--uitest-reset"] : [])
         app.launch()
-        XCTAssertTrue(app.buttons["scope-notes"].waitForExistence(timeout: 20))
+        XCTAssertTrue(tab(.notes, in: app).waitForExistence(timeout: 20))
         return app
     }
     @MainActor private func screenshot(_ app: XCUIApplication, _ name: String) {
@@ -33,22 +57,26 @@ final class BlueUITests: XCTestCase {
         let app = launch()
         XCTAssertFalse(app.buttons["row-Interstellar"].exists)
         XCTAssertFalse(app.textFields["assistantInput"].exists)
-        XCTAssertFalse(app.buttons["scope-favorites"].exists)
+        XCTAssertEqual(app.tabBars.firstMatch.buttons.count, 4)
+        assertHeaderAligned(app, with: "createMenu")
         screenshot(app, "overview-english")
-        app.buttons["scope-notes"].tap()
+        tab(.notes, in: app).tap()
+        assertHeaderAligned(app, with: "createMenu")
         screenshot(app, "notes-titles-only")
-        app.buttons["scope-calendar"].tap()
+        tab(.calendar, in: app).tap()
+        assertHeaderAligned(app, with: "newEvent")
         app.buttons["day-8"].tap()
         XCTAssertTrue(app.otherElements["sheetBackdrop"].waitForExistence(timeout: 5))
         screenshot(app, "calendar-day-sheet")
         dismissSheet(app)
         XCTAssertTrue(app.buttons["newEvent"].isHittable)
         spanish(app)
+        assertHeaderAligned(app, with: "newEvent")
         screenshot(app, "calendar-spanish")
     }
     @MainActor func testEventAutosaveAndDeleteCancellation() {
         var app = launch()
-        app.buttons["scope-calendar"].tap()
+        tab(.calendar, in: app).tap()
         app.buttons["newEvent"].tap()
         let title = app.textFields["eventTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
@@ -57,7 +85,7 @@ final class BlueUITests: XCTestCase {
         dismissSheet(app)
         app.terminate()
         app = launch(reset: false)
-        app.buttons["scope-calendar"].tap()
+        tab(.calendar, in: app).tap()
         let day = Calendar.current.component(.day, from: Date())
         app.buttons["day-\(day)"].tap()
         XCTAssertTrue(
@@ -85,7 +113,7 @@ final class BlueUITests: XCTestCase {
         body.typeText("First line\nSecond line")
         app.terminate()
         app = launch(reset: false)
-        app.buttons["scope-notes"].tap()
+        tab(.notes, in: app).tap()
         app.buttons["note-Quiet notes"].tap()
         let reopenedBody = app.descendants(matching: .any).matching(identifier: "noteBody").firstMatch
         XCTAssertTrue(reopenedBody.waitForExistence(timeout: 5))
@@ -106,20 +134,23 @@ final class BlueUITests: XCTestCase {
         app.buttons["Delete"].tap()
         XCTAssertTrue(app.buttons["confirmDelete"].waitForExistence(timeout: 5))
         app.buttons["confirmDelete"].tap()
-        XCTAssertTrue(app.buttons["scope-notes"].waitForExistence(timeout: 5))
+        XCTAssertTrue(tab(.notes, in: app).waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["note-Quiet notes"].exists)
         app.terminate()
         app = launch(reset: false)
-        app.buttons["scope-notes"].tap()
+        tab(.notes, in: app).tap()
         XCTAssertFalse(app.buttons["note-Quiet notes"].exists)
     }
     @MainActor func testCollectionSortIconsNumberWheelAndRelaunch() {
         let app = launch()
         app.buttons["collection-template.movies"].tap()
-        XCTAssertFalse(app.buttons["quickFilter-__favorite"].exists)
-        XCTAssertFalse(app.buttons["scope-notes"].exists)
         let sort = app.buttons["sortDirection"]
         XCTAssertTrue(sort.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["quickFilter-__favorite"].exists)
+        // The root tab bar can remain in the accessibility tree during a push.
+        let hiddenTab = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"), object: tab(.notes, in: app))
+        XCTAssertEqual(XCTWaiter.wait(for: [hiddenTab], timeout: 5), .completed)
         sort.tap()
         XCTAssertEqual(sort.value as? String, "Descending")
         sort.tap()
@@ -143,8 +174,8 @@ final class BlueUITests: XCTestCase {
     }
     @MainActor func testAssistantSheetReturnAndDraftDismissal() {
         let app = launch()
-        let blue = app.buttons["askBlue"]
-        XCTAssertGreaterThan(blue.frame.minX, app.buttons["scope-calendar"].frame.maxX)
+        let blue = tab(.blue, in: app)
+        XCTAssertGreaterThanOrEqual(blue.frame.minX, tab(.calendar, in: app).frame.maxX)
         blue.tap()
         let input = app.textFields["assistantInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
@@ -158,25 +189,25 @@ final class BlueUITests: XCTestCase {
         XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Close"].exists)
         XCTAssertGreaterThan(input.frame.midY, app.buttons["result-Interstellar"].frame.midY)
-        XCTAssertFalse(app.buttons["scope-notes"].exists)
+        XCTAssertFalse(tab(.notes, in: app).exists)
         screenshot(app, "assistant-result-sheet")
         dismissSheet(app)
-        app.buttons["scope-notes"].tap()
+        tab(.notes, in: app).tap()
         XCTAssertFalse(input.exists)
-        app.buttons["askBlue"].tap()
+        tab(.blue, in: app).tap()
         input.tap()
         input.typeText("Unsent draft")
         dismissSheet(app)
-        app.buttons["askBlue"].tap()
+        tab(.blue, in: app).tap()
         XCTAssertEqual(input.value as? String, "Unsent draft")
     }
     @MainActor func testBlueSearchWithoutLocalModel() {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest", "--uitest-reset", "--test-library-search"]
         app.launch()
-        XCTAssertTrue(app.buttons["askBlue"].waitForExistence(timeout: 20))
+        XCTAssertTrue(tab(.blue, in: app).waitForExistence(timeout: 20))
         spanish(app)
-        app.buttons["askBlue"].tap()
+        tab(.blue, in: app).tap()
         let input = app.textFields["assistantInput"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
         XCTAssertEqual(input.placeholderValue, "Buscar en Blue")
@@ -193,7 +224,7 @@ final class BlueUITests: XCTestCase {
     @MainActor func testSpanishOverviewAndTouchTargets() {
         let app = launch()
         spanish(app)
-        XCTAssertTrue(app.buttons["scope-collections"].waitForExistence(timeout: 5))
+        XCTAssertTrue(tab(.collections, in: app).waitForExistence(timeout: 5))
         screenshot(app, "overview-spanish")
         app.buttons["collection-template.movies"].tap()
         screenshot(app, "collection-spanish")
@@ -204,7 +235,7 @@ final class BlueUITests: XCTestCase {
         }
         app.buttons["askBlue"].tap()
         XCTAssertTrue(app.textFields["assistantInput"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["scope-notes"].exists)
+        XCTAssertFalse(tab(.notes, in: app).exists)
         screenshot(app, "assistant-spanish")
     }
     @MainActor func testAccessibilitySizeCalendarAndNotes() {
@@ -214,11 +245,11 @@ final class BlueUITests: XCTestCase {
             "UICTContentSizeCategoryAccessibilityXXXL",
         ]
         app.launch()
-        XCTAssertTrue(app.buttons["scope-calendar"].waitForExistence(timeout: 20))
-        app.buttons["scope-calendar"].tap()
+        XCTAssertTrue(tab(.calendar, in: app).waitForExistence(timeout: 20))
+        tab(.calendar, in: app).tap()
         XCTAssertTrue(app.datePickers.firstMatch.exists)
         screenshot(app, "calendar-accessibility-size")
-        app.buttons["scope-notes"].tap()
+        tab(.notes, in: app).tap()
         screenshot(app, "notes-accessibility-size")
     }
 

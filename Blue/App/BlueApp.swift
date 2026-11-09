@@ -89,22 +89,44 @@ struct BlueRoot: View {
     var body: some View {
         @Bindable var navigation = navigation
         NavigationStack(path: $navigation.path) {
-            LibraryView()
-                .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .collection(let id): CollectionView(collectionID: id)
-                    case .record(let id): RecordEditor(recordID: id)
-                    case .newRecord(let id): RecordEditor(collectionID: id)
-                    case .note(let id): NoteEditor(noteID: id)
-                    case .newNote: NoteEditor()
-                    case .newCollection: CollectionCreator()
-                    case .collectionSettings(let id): CollectionSettings(collectionID: id)
-                    }
+            TabView(selection: tabSelection) {
+                Tab(
+                    l(LibrarySection.notes.titleKey), systemImage: "text.alignleft",
+                    value: LibrarySection.notes.rawValue
+                ) {
+                    library(.notes)
                 }
+                Tab(
+                    l(LibrarySection.collections.titleKey), systemImage: "square.stack",
+                    value: LibrarySection.collections.rawValue
+                ) {
+                    library(.collections)
+                }
+                Tab(
+                    l(LibrarySection.calendar.titleKey), systemImage: "calendar",
+                    value: LibrarySection.calendar.rawValue
+                ) {
+                    library(.calendar)
+                }
+                Tab(l("library.askBlue"), image: "BlueTabIcon", value: "blue", role: blueTabRole) {
+                    Color.clear.accessibilityHidden(true)
+                }
+            }
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .collection(let id): CollectionView(collectionID: id)
+                case .record(let id): RecordEditor(recordID: id)
+                case .newRecord(let id): RecordEditor(collectionID: id)
+                case .note(let id): NoteEditor(noteID: id)
+                case .newNote: NoteEditor()
+                case .newCollection: CollectionCreator()
+                case .collectionSettings(let id): CollectionSettings(collectionID: id)
+                }
+            }
         }
-        .overlay(alignment: .bottom) {
-            if !navigation.assistantExpanded && navigation.detail == nil && navigation.presentations.isEmpty {
-                BlueNavigation(showsSections: navigation.path.isEmpty)
+        .overlay(alignment: .bottomTrailing) {
+            if !navigation.path.isEmpty && showsNavigation {
+                BlueButton().padding(.trailing, 18).padding(.bottom, 6)
             }
         }
         .blueSheet(
@@ -128,9 +150,10 @@ struct BlueRoot: View {
         }
         .blueSheet(isPresented: $navigation.assistantExpanded, title: "", fitsContent: true) { AssistantDock() }
         .environment(navigation).environment(assistant).environment(alarms)
-        .onChange(of: navigation.tab) { _, _ in
+        .onChange(of: navigation.section) { _, section in
             navigation.assistantFocused = false
             navigation.assistantExpanded = false
+            assistant.selectSurface(section.rawValue)
         }
         .task {
             alarms.reconcile()
@@ -138,7 +161,7 @@ struct BlueRoot: View {
         }
         .onChange(of: phase) { _, phase in if phase == .active { alarms.reconcile() } }
         .onChange(of: navigation.path) { _, path in
-            if path.isEmpty { assistant.selectSurface(navigation.scope) }
+            if path.isEmpty { assistant.selectSurface(navigation.section.rawValue) }
             if case .note(let id) = path.last { assistant.selectNote(id) }
             if case .record(let id) = path.last { assistant.selectRecord(id) }
             if case .collection(let id) = path.last { assistant.selectCollection(id, store: store) }
@@ -150,7 +173,6 @@ struct BlueRoot: View {
             if case .note(let id) = route { assistant.selectNote(id) }
             if case .record(let id) = route { assistant.selectRecord(id) }
         }
-        .onChange(of: navigation.scope) { _, scope in assistant.selectSurface(scope) }
         .onChange(of: navigation.selectedDate) { _, date in
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
@@ -160,59 +182,49 @@ struct BlueRoot: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in alarms.reconcile() }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in alarms.reconcile() }
     }
-
+    private var showsNavigation: Bool {
+        !navigation.assistantExpanded && navigation.detail == nil && navigation.presentations.isEmpty
+    }
+    private var blueTabRole: TabRole {
+        if #available(iOS 27.0, *) { return .prominent }
+        return .search
+    }
+    private func library(_ section: LibrarySection) -> some View {
+        LibraryView(section: section)
+            .toolbar(showsNavigation ? .visible : .hidden, for: .tabBar)
+    }
+    private var tabSelection: Binding<String> {
+        Binding(
+            get: { navigation.section.rawValue },
+            set: { value in
+                if value == "blue" {
+                    navigation.assistantFocused = true
+                    navigation.assistantExpanded = true
+                } else if let section = LibrarySection(rawValue: value) {
+                    navigation.path = []
+                    navigation.section = section
+                }
+            })
+    }
 }
 
-struct BlueNavigation: View {
-    var showsSections = true
+struct BlueButton: View {
     var ask: (() -> Void)? = nil
     @Environment(NavigationState.self) private var navigation
     @Environment(AssistantService.self) private var assistant
     @Environment(Localizer.self) private var l
     var body: some View {
-        HStack(spacing: 12) {
-            if showsSections {
-                HStack(spacing: 0) {
-                    tabButton("notes", key: "tab.notes", symbol: "text.alignleft")
-                    tabButton("collections", key: "library.collections", symbol: "square.stack")
-                    tabButton("calendar", key: "tab.calendar", symbol: "calendar")
-                }
-                .padding(.horizontal, 8).padding(.vertical, 5)
-                .glassEffect(.regular, in: Capsule())
-            } else {
-                Spacer()
-            }
-            Button {
-                if let ask {
-                    ask()
-                } else {
-                    navigation.assistantExpanded = true
-                    navigation.assistantFocused = true
-                }
-            } label: {
-                BlueCharacter(state: assistant.state).frame(width: 58, height: 58)
-                    .glassEffect(.regular.tint(Color.blue.opacity(0.12)).interactive(), in: Circle())
-            }
-            .buttonStyle(.plain).accessibilityLabel(l("library.askBlue")).accessibilityIdentifier("askBlue")
-        }
-        .padding(.horizontal, 18).padding(.bottom, 6)
-    }
-    private func tabButton(_ scope: String, key: String, symbol: String) -> some View {
         Button {
-            navigation.scope = scope
-            navigation.tab = scope == "calendar" ? 1 : 0
-            navigation.path = []
-            navigation.assistantExpanded = false
+            if let ask {
+                ask()
+            } else {
+                navigation.assistantFocused = true
+                navigation.assistantExpanded = true
+            }
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 20))
-                Text(l(key)).font(.caption2).dynamicTypeSize(...DynamicTypeSize.xxxLarge).lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            }.frame(maxWidth: .infinity, minHeight: 52)
-                .foregroundStyle(navigation.scope == scope ? Color.primary : Color.secondary)
-                .background(navigation.scope == scope ? Color.primary.opacity(0.08) : .clear, in: Capsule())
-        }.buttonStyle(.plain).frame(maxWidth: .infinity, minHeight: 52).contentShape(Rectangle())
-            .accessibilityIdentifier("scope-\(scope)")
-            .accessibilityAddTraits(navigation.scope == scope ? .isSelected : [])
+            BlueCharacter(state: assistant.state).frame(width: 58, height: 58)
+                .glassEffect(.regular.tint(Color.blue.opacity(0.12)).interactive(), in: Circle())
+        }
+        .buttonStyle(.plain).accessibilityLabel(l("library.askBlue")).accessibilityIdentifier("askBlue")
     }
 }

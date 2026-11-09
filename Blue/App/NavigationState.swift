@@ -10,11 +10,22 @@ enum Route: Hashable {
     case collectionSettings(UUID)
 }
 
+enum LibrarySection: String {
+    case notes, collections, calendar
+
+    var titleKey: String {
+        switch self {
+        case .notes: "tab.notes"
+        case .collections: "library.collections"
+        case .calendar: "tab.calendar"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class NavigationState {
-    var tab = 0
-    var scope = "collections"
+    var section: LibrarySection = .collections
     var path: [Route] = []
     var pendingAssistant = false
     var detail: Route?
@@ -33,7 +44,7 @@ final class NavigationState {
     var assistantFocused = false
     var assistantExpanded = false
     func jump(to record: Record, store: LibraryStore, locale: Locale) {
-        tab = 0
+        section = .collections
         var query = queries[record.collectionID] ?? CollectionQuery()
         let fields = store.collection(record.collectionID)?.fields ?? []
         if query.apply(to: [record], fields: fields, locale: locale).isEmpty {
@@ -48,7 +59,8 @@ final class NavigationState {
         highlightedRecord = record.id
     }
     func jump(to alarm: SavedAlarm) {
-        tab = 1
+        section = .calendar
+        path = []
         selectedDate = alarm.date
         highlightedAlarm = alarm.id
     }

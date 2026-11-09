@@ -201,8 +201,6 @@ struct AssistantDock: View {
                 if let alarm = store.state.alarms.first(where: { $0.id == id }) {
                     Button("\(l.time(alarm.date)) · \(alarm.title)") {
                         navigation.jump(to: alarm)
-                        navigation.scope = "calendar"
-                        navigation.path = []
                         navigation.assistantExpanded = false
                     }.frame(minHeight: 44)
                 }

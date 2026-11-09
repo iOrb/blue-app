@@ -72,15 +72,14 @@ struct RecordEditor: View {
                 ).frame(maxWidth: .infinity)
             }.accessibilityIdentifier("recordEditor").scrollDismissesKeyboard(.interactively)
         }.background(Color(uiColor: .systemBackground)).modifier(KeyboardDismissToolbar())
-            .overlay(alignment: .bottom) {
+            .overlay(alignment: .bottomTrailing) {
                 if !confirmDelete {
-                    BlueNavigation(
-                        showsSections: false,
+                    BlueButton(
                         ask: {
                             if let draft { assistant.selectRecord(draft.id) }
                             navigation.pendingAssistant = true
                             navigation.detail = nil
-                        })
+                        }).padding(.trailing, 18).padding(.bottom, 6)
                 }
             }
             .blueConfirmation(isPresented: $confirmDelete, title: l("record.confirmDelete")) {

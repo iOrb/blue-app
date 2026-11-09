@@ -59,6 +59,10 @@ On 8 November 2026, Blue commit `5e7a8fd` was installed on an iPhone 13 mini run
 - Release simulator compilation passed. A signed Debug iPhone build with `ENABLE_DEBUG_DYLIB=NO` was installed over Wi-Fi and launched on the existing iPhone 13 mini. The same importer validated the saved copy before transfer. The updated app consumed the private app-local file, and the phone store contained all six collection IDs, 27 record IDs and two note IDs. The import test checks that reimporting preserves edits and that invalid records abort the transaction.
 - The original physical microphone crash was an isolation assertion in the Speech authorization callback. The fix uses a Sendable authorization callback and a nonisolated audio tap. The updated app launched and had no new crash report during the post-install check. Actual spoken transcription still requires a hardware check.
 
+## Native tab bar and aligned section headers
+
+On 9 November 2026, the native SwiftUI tab bar and aligned section headers were compiled in Debug and Release and installed and launched over Wi-Fi on the iPhone 13 mini. `caffeinate -i scripts/test.sh` ran the BlueUITests suite on Blue Compact and Blue Verification (`Tests-20261109-090849.xcresult`). Seven flows passed on both sizes. The collection test completed its rating edit and relaunch but checked the tab bar during a navigation transition. It now waits for the bar to be untappable. The focused collection rerun passed on both sizes (`Tests-20261109-091412.xcresult`). English and Spanish screenshots show the aligned title, settings and add controls and Blue in the separate iOS 27 tab position.
+
 ## Remaining physical and integration checks
 
 - Recover the Mac's Apple model service, then rerun `scripts/test-model-mac.sh`, `scripts/test-model-mac.sh scripts/conversation-integration-mac.swift`, and genuine web conversation checks. No account or distribution credentials are required for this blocker. No universal language-understanding claim is made; pending proposals and new semantic classifier still require that final integration regression.
