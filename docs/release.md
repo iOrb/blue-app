@@ -1,6 +1,6 @@
 # Blue internal TestFlight delivery
 
-Current plan (17 November 2026): paid Apple Developer Program, internal TestFlight and Xcode Cloud. No public App Store release is authorized. Keep bundle ID `app.iorb.blue.ios` and the existing team `Z33UY64QQA`; never uninstall the existing app to change delivery. Xcode shows the account as Admin on a developer team, but its Cloud team chooser currently offers no eligible team. Paid membership activation and App Store Connect access still need verification.
+Current plan (17 November 2026): paid Apple Developer Program, internal TestFlight and Xcode Cloud. No public App Store release is authorized. Keep bundle ID `app.iorb.blue.ios` and the existing team `Z33UY64QQA`; never uninstall the existing app to change delivery. Membership and App Store Connect access are verified. The paid individual membership uses the same team ID as the previous development build. The Apple app record is **Blue by iOrb**, ID **6835902525** (the display name on iPhone remains Blue). The internal **Blue Internal** group has the account holder as its tester, with automatic distribution enabled for ordinary Xcode uploads. Cloud-distributed builds need the workflow post-action configured separately.
 
 ## Delivery workflow
 
@@ -16,7 +16,7 @@ Use only the included Xcode Cloud allowance (25 compute hours/month). Do not pur
 
 ## Local fallback
 
-`scripts/archive.sh` creates a signed Release archive without uploading it. Open it in Xcode Organizer to validate and distribute to App Store Connect. `scripts/update-iphone.sh` remains a local development fallback; it is not necessary for TestFlight updates. Simulator work does not require signing.
+`scripts/archive.sh` creates a signed Release archive without uploading it. `scripts/upload-testflight.sh <archive>` uploads that verified archive using the existing Xcode account and automatic signing. Export options enforce internal TestFlight only and upload symbols for Apple crash diagnostics. Build numbers must be unique; increase the project version before each subsequent local archive. Xcode Organizer remains an alternative. `scripts/update-iphone.sh` remains a local development fallback; it is not necessary for TestFlight updates. Simulator work does not require signing.
 
 ## Cloud backup scope
 
@@ -24,7 +24,7 @@ Existing optional Google Drive backup stays independent of TestFlight. It writes
 
 ## Current activation status
 
-Local preparation is in progress. No successful TestFlight upload, Xcode Cloud workflow or iCloud container is claimed until verified in the relevant Apple service. App Store privacy/export declarations and any agreements must reflect the actual app and account before distribution.
+The app record and internal tester group are created. The first upload command failed before upload with `exportArchive Failed to Use Accounts`: Xcode requires App Store Connect access for Z33UY64QQA even though the Chrome session works. Refreshing the Apple Account in Xcode is the next step. The Mac subsequently locked, preventing further UI configuration. No processed TestFlight build, Xcode Cloud workflow or iCloud container is claimed. App Store privacy/export declarations and any agreements must reflect the actual app and account before distribution.
 
 Sources: [Xcode Cloud setup](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [TestFlight distribution](https://developer.apple.com/documentation/xcode/distributing-your-xcode-cloud-builds-through-testflight), [included cloud allowance](https://developer.apple.com/xcode-cloud/get-started/).
 
