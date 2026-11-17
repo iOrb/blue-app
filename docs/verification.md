@@ -10,6 +10,8 @@ Completed:
 - `scripts/archive.sh` — passed: signed local Release archive `artifacts/Blue-20261117-120600.xcarchive`. This is a development-signed archive, not a successful distribution upload. Its application identifier and team match the previous local build: `Z33UY64QQA.app.iorb.blue.ios` / `Z33UY64QQA`.
 - `scripts/build-device.sh` — passed (unsigned iPhone SDK compilation).
 - `scripts/test.sh -only-testing:BlueUITests/BlueUITests/testNoteAutosavesAndSurvivesRelaunch` — passed, including persisted note edits after relaunch. Result: `artifacts/Tests-20261117-120704.xcresult`. Xcode reported a simulator diagnostic-collection warning about `simctl` after the test; the test and result bundle completed successfully.
+- Shared `BlueCloud` scheme tested locally with its Cloud configuration: 75 tests in 16 suites passed. The initial run exposed that scheme skipped-suite entries did not exclude Swift Testing suites; fixed with `CLOUD_VERIFICATION` compilation guards for the two opt-in suites. Evidence: `artifacts/cloud-scheme-tests.log` and `.build-cloud/Logs/Test/Test-BlueCloud-2026.11.17_12-10-50-+0100.xcresult`. Normal Debug/Release opt-in suites remain available.
+- Hosted GitHub source checks passed: https://github.com/iOrb/blue-app/actions/runs/44071474355. Source is prepared in https://github.com/iOrb/blue-app/pull/1; this is not a deployed cloud distribution workflow.
 - GitHub checks now use a hosted Linux source-check job instead of the unavailable private `xcode-27` runner. Xcode Cloud hooks use Apple's selected toolchain, install no packages and require no embedded distribution secrets.
 
 Pending/account-dependent:

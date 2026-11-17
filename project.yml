@@ -5,7 +5,14 @@ options:
     iOS: '26.0'
   developmentLanguage: en
   knownRegions: [en, es, Base]
+configs:
+  Debug: debug
+  Release: release
+  Cloud: debug
 settings:
+  configs:
+    Cloud:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG CLOUD_VERIFICATION"
   base:
     SWIFT_VERSION: '6.0'
     SWIFT_STRICT_CONCURRENCY: complete
@@ -80,9 +87,8 @@ schemes:
       targets:
         Blue: all
     test:
-      targets:
-        - name: BlueTests
-          skippedTests: [RealModelTests, QueryPerformanceTests]
+      config: Cloud
+      targets: [BlueTests]
       gatherCoverageData: true
     archive:
       config: Release

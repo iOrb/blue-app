@@ -24,7 +24,7 @@
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Debug"
+      buildConfiguration = "Cloud"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
@@ -50,14 +50,6 @@
                BlueprintName = "BlueTests"
                ReferencedContainer = "container:Blue.xcodeproj">
             </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "RealModelTests">
-               </Test>
-               <Test
-                  Identifier = "QueryPerformanceTests">
-               </Test>
-            </SkippedTests>
          </TestableReference>
       </Testables>
       <CommandLineArguments>
