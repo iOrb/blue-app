@@ -66,7 +66,8 @@ struct ReadLibraryTool: Tool {
                     ["id": $0.id.uuidString, "title": $0.title, "collectionID": $0.collectionID.uuidString]
                 }
             case .note: catalog = state.notes.map { ["id": $0.id.uuidString, "title": l.text($0.title)] }
-            case .collection: catalog = state.collections.map { ["id": $0.id.uuidString, "title": l.text($0.title)] }
+            case .collection:
+                catalog = state.collections.map { ["id": $0.id.uuidString, "title": l.text($0.title)] }
             case .event:
                 catalog = (state.events ?? []).map {
                     ["id": $0.id.uuidString, "title": $0.title, "date": $0.date.ISO8601Format()]
@@ -184,48 +185,63 @@ struct ReadLibraryTool: Tool {
 struct CalendarEventsTool: Tool {
     let name = "calendarEvents"
     let description =
-        "Find calendar events on a local day, create a new calendar event, or update an already read event. Calendar events do not trigger alarms. Dates must be unambiguous ISO8601 with timezone; day is yyyy-MM-dd in the user's timezone."
+        "Find, create or update standard calendar events. Alarm and reminder mean event. Every future event rings on the iPhone and notifies. Only name, day, time, optional weekly repeat and notes are editable. Never invent recurrence."
     let context: ToolContext
     @Generable enum Action { case find, create, update }
     @Generable struct Arguments {
         var action: Action
         var eventID: String?
-        var title: String
+        var title: String?
         @Guide(
             description:
-                "Full ISO8601 timestamp including seconds and timezone offset, e.g. 2026-11-09T22:00:00+01:00. Use the user timezone; preserve the saved calendar day unless asked to move it."
-        ) var dateISO8601: String
-        @Guide(description: "Local calendar day exactly yyyy-MM-dd, e.g. 2026-11-09.") var day: String
-        var allDay: Bool
-        var color: CreateCollectionTool.ProposedTint
+                "ISO8601 timestamp including timezone. Keep the existing date unless the user asks to change it.")
+        var dateISO8601: String
+        var notes: String?
+        @Guide(
+            description:
+                "Only when the user explicitly requests weekly repetition: 1 Sunday through 7 Saturday. Empty clears repetition; omitted preserves it."
+        ) var weekdays: [Int]?
     }
     func call(arguments: Arguments) async throws -> String { try await perform(arguments) }
-    @MainActor private func perform(_ args: Arguments) throws -> String {
+    @MainActor private func perform(_ args: Arguments) async throws -> String {
         try context.check(mutation: args.action != .find)
         guard let date = ISO8601DateFormatter().date(from: args.dateISO8601) else { throw BlueError.invalidValue }
         if args.action == .find {
-            let events = (context.store.state.events ?? []).filter {
-                $0.day == args.day || Calendar.current.isDate($0.date, inSameDayAs: date)
-            }
+            let events = (context.store.state.events ?? []).filter { $0.occurs(on: date) }
             for event in events { context.readEventRevisions[event.id] = event.revision }
             context.result = .events(events.map(\.id))
-            return String(decoding: try JSONEncoder().encode(events), as: UTF8.self)
+            let items = events.map { event -> [String: Any] in
+                [
+                    "id": event.id.uuidString, "title": event.title, "date": event.date.ISO8601Format(),
+                    "weekdays": event.repeatDays, "notes": event.notes ?? "",
+                ]
+            }
+            return String(decoding: try JSONSerialization.data(withJSONObject: items), as: UTF8.self)
         }
-        var event = CalendarEvent(
-            title: args.title, date: date, day: args.day, allDay: args.allDay, color: args.color.rawValue)
+        var event = CalendarEvent(title: Localizer(language: context.language)("event.title"), date: date)
         var revision: Int?
         if args.action == .update {
             guard let raw = args.eventID, let id = UUID(uuidString: raw), let read = context.readEventRevisions[id],
                 let existing = context.store.state.events?.first(where: { $0.id == id }), existing.revision == read
             else { throw BlueError.staleRevision }
-            event.id = id
-            event.revision = read
+            event = existing
+            event.date = date
             revision = read
         }
-        try context.store.saveEvent(event, expectedRevision: revision)
+        if let title = args.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            event.title = title
+        }
+        if let notes = args.notes { event.notes = notes.isEmpty ? nil : notes }
+        if let weekdays = args.weekdays { event.repeatDays = weekdays }
+        try Validation.event(event)
+        #if os(iOS)
+            try await context.alarms.saveTimedEvent(event, expectedRevision: revision)
+        #else
+            try context.store.saveEvent(event, expectedRevision: revision)
+        #endif
         context.didMutate = true
         context.result = .events([event.id])
-        return "Saved calendar event \(event.id). No alarm was scheduled."
+        return "Saved calendar event \(event.id)."
     }
 }
 

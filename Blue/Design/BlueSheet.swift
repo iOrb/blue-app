@@ -1,64 +1,114 @@
 import SwiftUI
 
-/// A fixed heading above scrolling content; the scrim and drag handle dismiss it.
-struct BlueSheet<Content: View>: View {
-    let title: String
-    let fitsContent: Bool
-    var dismiss: () -> Void
-    @ViewBuilder var content: () -> Content
-    @State private var offset: CGFloat = 0
-    @State private var presentationID = UUID()
-    @Environment(NavigationState.self) private var navigation
+private struct BlueSheetSurfaceKey: EnvironmentKey {
+    static let defaultValue = Color(uiColor: .systemBackground)
+}
+
+extension EnvironmentValues {
+    var blueSheetSurface: Color {
+        get { self[BlueSheetSurfaceKey.self] }
+        set { self[BlueSheetSurfaceKey.self] = newValue }
+    }
+}
+
+private struct BlueSheetDismissKey: EnvironmentKey {
+    static let defaultValue: (@MainActor () -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var blueSheetDismiss: (@MainActor () -> Void)? {
+        get { self[BlueSheetDismissKey.self] }
+        set { self[BlueSheetDismissKey.self] = newValue }
+    }
+}
+
+struct BlueCloseButton: View {
+    let action: () -> Void
+
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                Color.black.opacity(0.32).ignoresSafeArea().onTapGesture(perform: dismiss)
-                    .accessibilityIdentifier("sheetBackdrop")
-                VStack(spacing: 0) {
-                    VStack(spacing: 12) {
-                        Capsule().fill(.tertiary).frame(width: 36, height: 4)
-                        if !title.isEmpty {
-                            Text(title).font(.title2.weight(.semibold)).frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }.padding(.horizontal, 24).padding(.top, 12).padding(.bottom, title.isEmpty ? 4 : 14)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture().onChanged { offset = max(0, $0.translation.height) }
-                                .onEnded { value in
-                                    if value.translation.height > 70 || value.predictedEndTranslation.height > 180 {
-                                        dismiss()
-                                    }
-                                    offset = 0
-                                })
-                    content().frame(maxWidth: .infinity, maxHeight: fitsContent ? nil : .infinity, alignment: .top)
-                }
-                .frame(maxWidth: 760).frame(height: fitsContent ? nil : geometry.size.height * 0.86)
-                .background {
-                    UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
-                        .fill(Color(uiColor: .systemBackground))
-                        .shadow(color: .black.opacity(0.22), radius: 20, y: -5)
-                        .ignoresSafeArea(.container, edges: .bottom)
-                }
-                .padding(.top, fitsContent ? geometry.size.height * 0.18 : 0)
-                .offset(y: offset)
-                .accessibilityAction(.escape, dismiss)
+        QuietButton(key: "close", symbol: "chevron.left", action: action)
+            .glassEffect(.regular.interactive(), in: Circle())
+    }
+}
+
+struct BlueDoneButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        QuietButton(key: "done", symbol: "checkmark", action: action)
+            .glassEffect(.regular.interactive(), in: Circle())
+    }
+}
+
+private struct BlueSheetHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct BlueSheet<Content: View>: View {
+    let title: String
+    let ownHeader: Bool
+    let initialHeight: CGFloat
+    let allowsExpansion: Bool
+    let close: @MainActor () -> Void
+    @ViewBuilder var content: () -> Content
+    @State private var measuredHeight: CGFloat = 0
+    @State private var expanded = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var surface: Color {
+        colorScheme == .dark ? Color(white: 0.12) : Color(uiColor: .systemBackground)
+    }
+    private var compactDetent: PresentationDetent {
+        let height = measuredHeight > 0 ? min(560, max(188, measuredHeight + 60)) : initialHeight
+        return .height(height.rounded(.up))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if !ownHeader {
+                BlueSheetHeader(title: title, close: close) { EmptyView() }
             }
+            content().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .onAppear { navigation.presentations.insert(presentationID) }
-        .onDisappear { navigation.presentations.remove(presentationID) }
+        .environment(\.blueSheetSurface, surface)
+        .environment(\.blueSheetDismiss, close)
+        .onPreferenceChange(BlueSheetHeight.self) { if $0 > 0 { measuredHeight = $0.rounded(.up) } }
+        .presentationDetents(
+            allowsExpansion ? [compactDetent, .large] : [compactDetent],
+            selection: Binding(get: { expanded ? .large : compactDetent }, set: { expanded = $0 == .large })
+        )
+        .presentationDragIndicator(.hidden)
+        .presentationBackgroundInteraction(.disabled)
+        .presentationBackground(surface)
+        .presentationCornerRadius(30)
+        .accessibilityAction(.escape, close)
     }
 }
 
 extension View {
     func blueSheet<Content: View>(
-        isPresented: Binding<Bool>, title: String, fitsContent: Bool = false, onDismiss: (() -> Void)? = nil,
+        isPresented: Binding<Bool>, title: String, initialHeight: CGFloat = 380, ownHeader: Bool = false,
+        allowsExpansion: Bool = true,
+        onDismiss: (() -> Void)? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        fullScreenCover(isPresented: isPresented, onDismiss: onDismiss) {
+        sheet(isPresented: isPresented, onDismiss: onDismiss) {
             BlueSheet(
-                title: title, fitsContent: fitsContent, dismiss: { isPresented.wrappedValue = false }, content: content
+                title: title, ownHeader: ownHeader, initialHeight: initialHeight, allowsExpansion: allowsExpansion,
+                close: { isPresented.wrappedValue = false }, content: content
             )
-            .presentationBackground(.clear)
+        }
+    }
+
+    // Measure the intrinsic content inside a scroll view, independently of the current detent.
+    func blueSheetContentSize() -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: BlueSheetHeight.self, value: geometry.size.height)
+            }
         }
     }
 }
@@ -98,28 +148,32 @@ struct EditableMarkdown: View {
 }
 
 struct BlueConfirmation: View {
-    @State private var presentationID = UUID()
-    @Environment(NavigationState.self) private var navigation
     let title: String
+    let visible: Bool
     var cancel: () -> Void
     var confirm: () -> Void
     @Environment(Localizer.self) private var l
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack {
-            Color.black.opacity(0.25).ignoresSafeArea().onTapGesture(perform: cancel)
+            Color.black.opacity(visible ? 0.28 : 0).ignoresSafeArea().onTapGesture(
+                perform: cancel)
             VStack(alignment: .leading, spacing: 24) {
-                Text(title).font(.title2.weight(.semibold))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.title2.weight(.semibold))
+                    Text(l("delete.irreversible")).font(.subheadline).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button(l("cancel"), action: cancel).frame(minHeight: 44)
                     Spacer()
-                    Button(role: .destructive, action: confirm) { Label(l("delete"), systemImage: "minus") }.frame(
+                    Button(role: .destructive, action: confirm) { BlueDeleteLabel() }.frame(
                         minHeight: 44
                     )
-                    .accessibilityIdentifier("confirmDelete")
+                    .foregroundStyle(.red).accessibilityIdentifier("confirmDelete")
                 }
             }.padding(28).frame(maxWidth: 350).background(
                 Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 28)
-            ).padding(24)
+            ).padding(24).scaleEffect(visible || reduceMotion ? 1 : 0.96).opacity(visible ? 1 : 0)
             VStack {
                 HStack {
                     Spacer()
@@ -129,66 +183,123 @@ struct BlueConfirmation: View {
                     }.accessibilityLabel(l("close")).accessibilityIdentifier("closeConfirmation")
                 }
                 Spacer()
-            }.padding(20)
-        }.accessibilityAction(.escape, cancel)
-            .onAppear { navigation.presentations.insert(presentationID) }
-            .onDisappear { navigation.presentations.remove(presentationID) }
+            }.padding(20).opacity(visible ? 1 : 0)
+        }
+        .allowsHitTesting(visible)
+        .accessibilityHidden(!visible)
+        .accessibilityAction(.escape, cancel)
     }
 }
 private struct BlueConfirmationModifier: ViewModifier {
     @Binding var isPresented: Bool
     let title: String
     var confirm: () -> Void
+    @State private var mounted = false
+    @State private var visible = false
     @State private var accepted = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func body(content: Content) -> some View {
-        content.fullScreenCover(
-            isPresented: $isPresented,
-            onDismiss: {
-                if accepted {
+        content
+            .fullScreenCover(
+                isPresented: $mounted,
+                onDismiss: {
+                    if accepted { confirm() }
                     accepted = false
-                    confirm()
                 }
-            },
-            content: {
+            ) {
                 BlueConfirmation(
-                    title: title, cancel: { isPresented = false },
-                    confirm: {
-                        accepted = true
-                        isPresented = false
-                    }
-                ).presentationBackground(.clear)
-            })
+                    title: title, visible: visible,
+                    cancel: { close(accepted: false) }, confirm: { close(accepted: true) }
+                )
+                .presentationBackground(.clear)
+                .onAppear { withAnimation(animation) { visible = true } }
+            }
+            .onChange(of: isPresented, initial: true) { _, presented in
+                if presented {
+                    setMounted(true)
+                } else if mounted {
+                    close(accepted: false)
+                }
+            }
+    }
+
+    private var animation: Animation { .easeInOut(duration: reduceMotion ? 0.12 : 0.22) }
+
+    private func close(accepted: Bool) {
+        guard visible else { return }
+        self.accepted = accepted
+        withAnimation(animation, completionCriteria: .logicallyComplete) {
+            visible = false
+        } completion: {
+            setMounted(false)
+            isPresented = false
+        }
+    }
+
+    private func setMounted(_ value: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { mounted = value }
     }
 }
+
 extension View {
     func blueConfirmation(isPresented: Binding<Bool>, title: String, confirm: @escaping () -> Void) -> some View {
         modifier(BlueConfirmationModifier(isPresented: isPresented, title: title, confirm: confirm))
     }
 }
+struct BlueSheetHeader<Actions: View>: View {
+    let title: String
+    let close: () -> Void
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        ZStack {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.title2.weight(.semibold)).lineLimit(1)
+                    .padding(.horizontal, 52)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("sheetTitle")
+            }
+            HStack {
+                BlueCloseButton(action: close).accessibilityIdentifier("closeSheet")
+                Spacer()
+                actions()
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 60)
+    }
+}
+
 struct DetailHeader<Options: View>: View {
+    var title = ""
     var close: () -> Void
     @ViewBuilder var options: () -> Options
     @Environment(Localizer.self) private var l
     var body: some View {
-        HStack {
-            QuietButton(key: "back", symbol: "chevron.down", action: close).accessibilityIdentifier("detailBack")
-            Spacer()
+        BlueSheetHeader(title: title, close: close) {
             Menu {
                 options()
             } label: {
-                Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle())
             }
+            .buttonStyle(BlueRowPress(shape: AnyShape(Circle())))
+            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel(l("options")).accessibilityIdentifier("detailOptions")
-        }.padding(.horizontal, 16)
+        }
     }
 }
 struct PlainNoteBody: View {
     @Binding var text: String
     @Environment(Localizer.self) private var l
     var identifier = "noteBody"
+    var minimumLines = 8
     var body: some View {
         TextField(l("note.markdown"), text: $text, axis: .vertical)
-            .lineLimit(8...1000).font(.body).frame(maxWidth: .infinity, alignment: .topLeading)
+            .lineLimit(minimumLines...1000).font(.body).frame(maxWidth: .infinity, alignment: .topLeading)
             .accessibilityIdentifier(identifier)
     }
 }

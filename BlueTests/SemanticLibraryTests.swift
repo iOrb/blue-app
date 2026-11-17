@@ -85,8 +85,7 @@ import Testing
         await #expect(throws: BlueError.unsupported) {
             try await CalendarEventsTool(context: context).call(
                 arguments: .init(
-                    action: .create, title: "Dinner", dateISO8601: "2026-11-08T20:00:00+01:00", day: "2026-11-08",
-                    allDay: false, color: .blue))
+                    action: .create, title: "Dinner", dateISO8601: "2026-11-08T20:00:00+01:00"))
         }
         #expect(store.state.events?.isEmpty == true)
     }

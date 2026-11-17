@@ -7,7 +7,7 @@ final class RealBridgeUITests: XCTestCase {
         app.launchArguments = ["--uitest", "--uitest-reset"]
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 20))
-        let input = app.textFields["assistantInput"]
+        let input = app.descendants(matching: .any)["assistantInput"].firstMatch
         input.tap()
         input.typeText("What rating did I give Interstellar?\n")
         XCTAssertTrue(app.buttons["result-Interstellar"].waitForExistence(timeout: 90))

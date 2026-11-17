@@ -23,16 +23,27 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Google OAuth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.986940080652-n0h197enieffheihatctvnva4n19vs20</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>GIDClientID</key>
+	<string>986940080652-n0h197enieffheihatctvnva4n19vs20.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Blue schedules the alarms you create, even when your iPhone is locked.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Blue uses the microphone only when you tap it to dictate a request.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Blue transcribes your voice on this device so you can edit and send it.</string>
+	<string>Blue uses the microphone for voice conversations and dictation you start.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

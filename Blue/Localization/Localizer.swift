@@ -26,7 +26,29 @@ final class Localizer {
     }
     func number(_ value: Double) -> String { value.formatted(.number.locale(locale).precision(.fractionLength(0...1))) }
     func date(_ date: Date) -> String { date.formatted(.dateTime.day().month(.wide).locale(locale)) }
-    func time(_ date: Date) -> String { date.formatted(.dateTime.hour().minute().locale(locale)) }
+    var twentyFourHourLocale: Locale {
+        var components = Locale.Components(locale: locale)
+        components.hourCycle = .zeroToTwentyThree
+        return Locale(components: components)
+    }
+    func time(_ date: Date) -> String {
+        return date.formatted(
+            .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(twentyFourHourLocale))
+    }
+    var orderedWeekdays: [Int] { language == .spanish ? [2, 3, 4, 5, 6, 7, 1] : [1, 2, 3, 4, 5, 6, 7] }
+    func weekday(_ day: Int, abbreviated: Bool = false) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        return (abbreviated ? formatter.shortStandaloneWeekdaySymbols : formatter.standaloneWeekdaySymbols)[day - 1]
+    }
+    func repeatSummary(_ days: [Int]) -> String {
+        let selected = Set(days)
+        if selected.isEmpty { return self("event.repeatNever") }
+        if selected.count == 7 { return self("event.repeatEveryDay") }
+        if selected == Set([2, 3, 4, 5, 6]) { return self("event.repeatWeekdays") }
+        if selected == Set([1, 7]) { return self("event.repeatWeekends") }
+        return orderedWeekdays.filter(selected.contains).map { weekday($0, abbreviated: true) }.joined(separator: ", ")
+    }
     func value(_ value: FieldValue?, field: FieldDefinition) -> String {
         guard let value else { return self("value.empty") }
         switch value {

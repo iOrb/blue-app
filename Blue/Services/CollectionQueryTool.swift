@@ -75,7 +75,8 @@ struct CollectionQueryTool: Tool {
         guard Set(filters.map(\.id)).count == filters.count else { throw BlueError.invalidValue }
         let query = CollectionQuery(sortField: arguments.sortFieldID, ascending: arguments.ascending, filters: filters)
         let records = query.apply(
-            to: context.store.records(in: collection.id), fields: collection.fields, locale: context.language.locale)
+            to: context.store.records(in: collection.id), fields: collection.fields,
+            locale: context.language.locale)
         context.result = .collectionView(collection.id, query)
         let schema = String(decoding: try JSONEncoder().encode(collection.fields), as: UTF8.self)
         return "Collection \(collection.id.uuidString), \(records.count) matching items. Fields: \(schema)"

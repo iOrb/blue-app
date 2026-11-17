@@ -2,6 +2,7 @@ import AlarmKit
 import Foundation
 import Observation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 protocol AlarmScheduling {
@@ -10,6 +11,85 @@ protocol AlarmScheduling {
     func cancel(_ id: UUID) throws
     func scheduledIDs() throws -> Set<UUID>
 }
+
+@MainActor
+protocol EventNotificationScheduling {
+    func schedule(_ event: CalendarEvent) async throws
+    func cancelNotification(for id: UUID)
+}
+
+@MainActor
+struct SystemEventNotifications: EventNotificationScheduling {
+    func schedule(_ event: CalendarEvent) async throws {
+        let center = UNUserNotificationCenter.current()
+        let status = await center.notificationSettings().authorizationStatus
+        if status == .notDetermined {
+            guard try await center.requestAuthorization(options: [.alert, .sound]) else {
+                throw BlueError.notificationPermissionDenied
+            }
+        } else if status == .denied {
+            throw BlueError.notificationPermissionDenied
+        }
+        try Task.checkCancellation()
+        guard event.nextOccurrence(after: .now) != nil else { return }
+        let content = UNMutableNotificationContent()
+        content.title = event.title
+        content.body = event.notes ?? ""
+        content.sound = .default
+        let requests = Self.requests(for: event, content: content)
+        do {
+            for request in requests { try await center.add(request) }
+        } catch {
+            center.removePendingNotificationRequests(withIdentifiers: requests.map(\.identifier))
+            throw error
+        }
+        let retained = Set(requests.map(\.identifier))
+        center.removePendingNotificationRequests(
+            withIdentifiers: Self.notificationIDs(event.id).filter { !retained.contains($0) })
+    }
+
+    func cancelNotification(for id: UUID) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: Self.notificationIDs(id))
+    }
+
+    static func requests(for event: CalendarEvent, content: UNNotificationContent) -> [UNNotificationRequest] {
+        let base = "blue-event-" + event.id.uuidString
+        if event.repeatDays.isEmpty {
+            return [
+                UNNotificationRequest(
+                    identifier: base, content: content,
+                    trigger: UNTimeIntervalNotificationTrigger(
+                        timeInterval: max(1, event.date.timeIntervalSinceNow), repeats: false))
+            ]
+        }
+        let time = Calendar.current.dateComponents([.hour, .minute], from: event.date)
+        return event.repeatDays.map { day in
+            UNNotificationRequest(
+                identifier: base + "-\(day)", content: content,
+                trigger: UNCalendarNotificationTrigger(
+                    dateMatching: DateComponents(hour: time.hour, minute: time.minute, weekday: day), repeats: true))
+        }
+    }
+
+    private static func notificationIDs(_ id: UUID) -> [String] {
+        let base = "blue-event-" + id.uuidString
+        return [base] + (1...7).map { base + "-\($0)" }
+    }
+}
+
+#if DEBUG && targetEnvironment(simulator)
+    @MainActor
+    final class SimulatorEventScheduleFixture: AlarmScheduling, EventNotificationScheduling {
+        private var alarms: Set<UUID>
+        init(alarms: [SavedAlarm]) { self.alarms = Set(alarms.filter(\.enabled).map(\.id)) }
+        func authorize() async throws {}
+        func schedule(_ alarm: SavedAlarm) async throws { alarms.insert(alarm.id) }
+        func schedule(_ event: CalendarEvent) async throws {}
+        func cancelNotification(for id: UUID) {}
+        func cancel(_ id: UUID) { alarms.remove(id) }
+        func scheduledIDs() throws -> Set<UUID> { alarms }
+    }
+#endif
 
 private struct BlueAlarmMetadata: AlarmMetadata {}
 
@@ -57,14 +137,24 @@ final class SystemAlarmScheduler: AlarmScheduling {
 final class AlarmService {
     private let store: LibraryStore
     private let scheduler: any AlarmScheduling
+    private let notifications: any EventNotificationScheduling
     private var inFlight: Set<UUID> = []
+    private var eventsInFlight: Set<UUID> = []
     var errorKey: String?
-    init(store: LibraryStore, scheduler: any AlarmScheduling = SystemAlarmScheduler()) {
+    init(
+        store: LibraryStore, scheduler: any AlarmScheduling = SystemAlarmScheduler(),
+        notifications: (any EventNotificationScheduling)? = nil
+    ) {
         self.store = store
         self.scheduler = scheduler
+        self.notifications = notifications ?? SystemEventNotifications()
     }
 
     func save(_ input: SavedAlarm) async throws {
+        try await save(input, committing: { _ in })
+    }
+
+    private func save(_ input: SavedAlarm, committing change: (inout LibraryState) throws -> Void) async throws {
         guard !inFlight.contains(input.id) else { throw BlueError.staleRevision }
         try Validation.title(input.title)
         guard input.weekdays.allSatisfy({ (1...7).contains($0) }), Set(input.weekdays).count == input.weekdays.count,
@@ -74,14 +164,26 @@ final class AlarmService {
         guard old == nil || old?.revision == input.revision else { throw BlueError.staleRevision }
         inFlight.insert(input.id)
         defer { inFlight.remove(input.id) }
+        var removed = false
+        var scheduled = false
         do {
             try Task.checkCancellation()
             if input.enabled {
                 try await scheduler.authorize()
                 try Task.checkCancellation()
-                try await scheduler.schedule(input)
-            } else if old?.enabled == true {
+            }
+            let exists = try scheduler.scheduledIDs().contains(input.id)
+            let unchanged =
+                old.map {
+                    $0.title == input.title && $0.date == input.date && $0.weekdays == input.weekdays
+                } ?? false
+            if exists && (!input.enabled || !unchanged) {
                 try scheduler.cancel(input.id)
+                removed = true
+            }
+            if input.enabled && (!exists || removed) {
+                try await scheduler.schedule(input)
+                scheduled = true
             }
             var saved = input
             saved.revision += 1
@@ -93,15 +195,102 @@ final class AlarmService {
                     } else {
                         state.alarms.append(saved)
                     }
+                    try change(&state)
                 }
-            } catch {
-                // Compensate when persistence fails after a system change.
-                if let old, old.enabled { try? await scheduler.schedule(old) } else { try? scheduler.cancel(input.id) }
-                throw BlueError.saveFailed
-            }
-        } catch let error as BlueError { throw error } catch is CancellationError { throw BlueError.cancelled } catch {
+            } catch { throw BlueError.saveFailed }
+        } catch {
+            if scheduled { try? scheduler.cancel(input.id) }
+            if removed, let old, old.enabled { try? await scheduler.schedule(old) }
+            if let error = error as? BlueError { throw error }
+            if error is CancellationError { throw BlueError.cancelled }
             throw BlueError.alarmFailed
         }
+    }
+
+    func saveEvent(_ event: CalendarEvent, expectedRevision: Int?, ringing: Bool) async throws {
+        try Validation.event(event)
+        guard store.state.events?.first(where: { $0.id == event.id })?.revision == expectedRevision else {
+            throw BlueError.staleRevision
+        }
+        let existing = store.state.alarms.first { $0.id == event.id }
+        guard ringing || existing != nil else {
+            try store.saveEvent(event, expectedRevision: expectedRevision)
+            return
+        }
+        guard !ringing || !event.allDay else { throw BlueError.invalidValue }
+        var alarm = existing ?? SavedAlarm(id: event.id, title: event.title, date: event.date)
+        alarm.title = event.title
+        alarm.date = event.date
+        alarm.weekdays = event.repeatDays
+        alarm.enabled = ringing
+        try await save(alarm) { state in
+            try LibraryStore.stageEvent(event, expectedRevision: expectedRevision, in: &state)
+            if !ringing { state.alarms.removeAll { $0.id == event.id } }
+        }
+    }
+
+    func saveTimedEvent(_ input: CalendarEvent, expectedRevision: Int?) async throws {
+        guard eventsInFlight.insert(input.id).inserted else { throw BlueError.staleRevision }
+        defer { eventsInFlight.remove(input.id) }
+        let previous = store.state.events?.first { $0.id == input.id }
+        guard previous?.revision == expectedRevision else { throw BlueError.staleRevision }
+        try Validation.event(input)
+        var event = input
+        event.allDay = false
+        if !event.repeatDays.isEmpty, let next = event.nextOccurrence(after: .now) {
+            event.date = next
+            event.day = nil
+        }
+        guard event.nextOccurrence(after: .now) != nil else {
+            try await savePastEvent(event, expectedRevision: expectedRevision)
+            return
+        }
+        event.notification = true
+        do {
+            try await notifications.schedule(event)
+            if event.nextOccurrence(after: .now) != nil {
+                try await saveEvent(event, expectedRevision: expectedRevision, ringing: true)
+            } else {
+                try await savePastEvent(event, expectedRevision: expectedRevision)
+            }
+        } catch {
+            notifications.cancelNotification(for: event.id)
+            if event.repeatDays.isEmpty, event.date <= Date(), !Task.isCancelled {
+                try await savePastEvent(event, expectedRevision: expectedRevision)
+                return
+            }
+            if let previous, previous.notification == true, previous.nextOccurrence(after: .now) != nil {
+                try? await notifications.schedule(previous)
+            }
+            throw error
+        }
+    }
+
+    private func savePastEvent(_ input: CalendarEvent, expectedRevision: Int?) async throws {
+        var event = input
+        event.notification = false
+        try await saveEvent(event, expectedRevision: expectedRevision, ringing: false)
+        notifications.cancelNotification(for: event.id)
+    }
+
+    func deleteEvent(_ event: CalendarEvent) async throws {
+        guard eventsInFlight.insert(event.id).inserted else { throw BlueError.staleRevision }
+        defer { eventsInFlight.remove(event.id) }
+        guard store.state.events?.first(where: { $0.id == event.id })?.revision == event.revision else {
+            throw BlueError.staleRevision
+        }
+        let deletion = PendingDeletion(kind: "event", id: event.id, revision: event.revision)
+        guard var alarm = store.state.alarms.first(where: { $0.id == event.id }) else {
+            try store.confirmDeletion(deletion)
+            notifications.cancelNotification(for: event.id)
+            return
+        }
+        alarm.enabled = false
+        try await save(alarm) { state in
+            try LibraryStore.stageDeletion(deletion, in: &state)
+            state.alarms.removeAll { $0.id == event.id }
+        }
+        notifications.cancelNotification(for: event.id)
     }
 
     func delete(_ alarm: SavedAlarm) async throws {

@@ -5,6 +5,9 @@ import Network
 // The simulator's model catalog can be unavailable while the Mac model works.
 // Only this development harness listens on loopback. No device/Release app uses it.
 @MainActor final class AlarmService {
+    func saveTimedEvent(_ event: CalendarEvent, expectedRevision: Int?) async throws { throw BlueError.unsupported }
+    func deleteEvent(_ event: CalendarEvent) async throws { throw BlueError.unsupported }
+
     func alarms(on date: Date) -> [SavedAlarm] { [] }
     func save(_ alarm: SavedAlarm) async throws { throw BlueError.unsupported }
 }
