@@ -24,7 +24,7 @@ Existing optional Google Drive backup stays independent of TestFlight. It writes
 
 ## Current activation status
 
-The app record and internal tester group are created. The first upload command failed before upload with `exportArchive Failed to Use Accounts`: Xcode requires App Store Connect access for Z33UY64QQA even though the Chrome session works. Refreshing the Apple Account in Xcode is the next step. The Mac subsequently locked, preventing further UI configuration. No processed TestFlight build, Xcode Cloud workflow or iCloud container is claimed. App Store privacy/export declarations and any agreements must reflect the actual app and account before distribution.
+The app record and internal tester group are created. The build 3 icon update is archived locally (1.0.0 / 3). Xcode currently needs Apple Account sign-in; its secure password sheet is left open for the account holder. The first upload command previously failed before upload with `exportArchive Failed to Use Accounts`: Xcode requires App Store Connect access for Z33UY64QQA even though the Chrome session works. Refreshing the Apple Account in Xcode is the next step. The Mac subsequently locked, preventing further UI configuration. No processed TestFlight build, Xcode Cloud workflow or iCloud container is claimed. App Store privacy/export declarations and any agreements must reflect the actual app and account before distribution.
 
 Sources: [Xcode Cloud setup](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [TestFlight distribution](https://developer.apple.com/documentation/xcode/distributing-your-xcode-cloud-builds-through-testflight), [included cloud allowance](https://developer.apple.com/xcode-cloud/get-started/).
 
@@ -40,3 +40,7 @@ Sources: [Xcode Cloud setup](https://developer.apple.com/documentation/xcode/con
 ## App Store preparation, without publication
 
 Keep the privacy manifest, permission descriptions, app icon and encryption declaration consistent with the actual build. Before any later public release, complete App Store privacy answers, provider-data disclosures, support/privacy URLs, screenshots, review notes and account-specific export compliance. The app currently has no Blue inference server or third-party analytics SDK. BYOK requests and optional Google backups have their own data destinations. No public-release submission is part of this delivery.
+
+## Home-screen icon update
+
+Build 3 contains the new mascot icon. Info.plist resolves marketing/build versions from project settings so each new archive can be distinguished by Apple. Source artwork prompt is in app-icon.md. Once the first internal build is processed and available to the account holder, install TestFlight on the iPhone, accept its invitation, and turn on Automatic Updates in Blue's TestFlight page. TestFlight does not require a local network connection to the development Mac; it requires internet access. Automatic installation is controlled by iOS and is not guaranteed to occur immediately after a push. GitHub pushes alone do not upload an app until the cloud workflow is enabled.

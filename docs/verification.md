@@ -1,3 +1,15 @@
+# Icon and versioned archive — 18 November 2026
+
+- Replaced the placeholder home-screen icon with an opaque 1024 × 1024 PNG of Blue's mascot. Generation prompt and provenance: docs/app-icon.md. Reviewed the full-size asset and its compiled small icon.
+- Fixed generated Info.plist versioning: CFBundleVersion now resolves CURRENT_PROJECT_VERSION and CFBundleShortVersionString resolves MARKETING_VERSION. The previous XcodeGen defaults were hardcoded to 1 / 1.0, even when project build settings said 2 or 3. Earlier archives retain their actual embedded build 1; do not infer their versions from project settings.
+- `xcodegen generate`, `scripts/check.sh`, `scripts/build.sh Release` passed. No domain/store/backup schema changes in this increment; earlier 75 unit tests remain the functional baseline.
+- `scripts/archive.sh` passed: `artifacts/Blue-20261118-142707.xcarchive`, embedded version 1.0.0, build 3, verified directly from the archived Info.plist. `codesign --verify --strict --deep` passed.
+- Release simulator install/launch performed for the new asset; screenshot: artifacts/icon-build-3-launch.png.
+- Distribution remains blocked by Xcode authentication: its Apple Accounts pane now shows no connected account. Opened Sign In, entered the known account email and left the secure Password field for the account holder. No password was requested through chat or embedded in code. Chrome's App Store Connect session is separate. No successful upload/processing or remote TestFlight update is claimed for build 3.
+- Physical phone checks (data retention on the first TestFlight replacement, Apple account invitation, mobile-data installation and automatic update timing) remain pending. No direct device install was attempted for this increment.
+
+---
+
 # Current delivery: internal TestFlight preparation — 17 November 2026
 
 The user authorized paid Apple Developer Program distribution, replacing the earlier Personal Team-only delivery restriction. Bundle ID remains `app.iorb.blue.ios`. `project.yml` now records the existing development team and local build 2; the separate shared BlueCloud scheme excludes live-model and performance suites from routine cloud unit tests. Xcode Cloud manages distribution build numbering once enabled; configure its next number above existing uploaded builds.

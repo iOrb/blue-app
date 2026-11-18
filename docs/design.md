@@ -35,3 +35,7 @@ Drive storage is optional. An account with only the previous file scope shows En
 ## Distribution and diagnostics (17 November 2026)
 
 TestFlight is the planned installation/update surface. App-owned UI does not need a weekly reinstall prompt. Apple beta feedback and crash diagnostics are the initial support path; no analytics SDK is added. Cloud backup is optional and separate from distribution.
+
+## Home-screen identity
+
+Blue uses a cobalt mascot with white eyes/smile on a pale icy-blue background. The opaque universal app icon leaves its outer mask to iOS; no lettering or miniature UI details. See app-icon.md for provenance.
