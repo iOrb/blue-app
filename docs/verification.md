@@ -1,3 +1,13 @@
+# Successful Apple upload — 18 November 2026
+
+- The account holder signed into Xcode; Apple Accounts now shows the existing account/team.
+- `scripts/upload-testflight.sh artifacts/Blue-20261118-142707.xcarchive` completed with exit 0 and `EXPORT SUCCEEDED`. Xcode reported `Upload succeeded`, `Uploaded Blue`, and `Uploaded package is processing`. The archive metadata verified earlier is 1.0.0 (3), bundle app.iorb.blue.ios, with the new opaque mascot icon. Evidence: artifacts/testflight-upload.log.
+- This confirms upload, not completed Apple processing or installation. TestFlight tester availability and the invitation are still being verified. No direct iPhone installation was attempted.
+- Xcode Cloud now recognizes Jordi Moreno's team. The wizard is at Connect Source Code Repository, awaiting browser authentication and repository authorization. No automatic workflow has been created or billed extra capacity.
+- App Store Connect in Chrome requests a separate Apple sign-in; the account holder has been asked to complete it. The existing Blue Internal group had automatic distribution enabled and one account-holder tester before this upload.
+
+---
+
 # Icon and versioned archive — 18 November 2026
 
 - Replaced the placeholder home-screen icon with an opaque 1024 × 1024 PNG of Blue's mascot. Generation prompt and provenance: docs/app-icon.md. Reviewed the full-size asset and its compiled small icon.
