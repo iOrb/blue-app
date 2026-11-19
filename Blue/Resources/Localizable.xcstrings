@@ -1,6 +1,261 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "artwork.useTheme": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this cover"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar esta portada"
+          }
+        }
+      }
+    },
+    "artwork.mood.neon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under neon lights"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bajo luces de neón"
+          }
+        }
+      }
+    },
+    "artwork.mood.moon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By moonlight"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A la luz de la luna"
+          }
+        }
+      }
+    },
+    "artwork.mood.sun": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In warm sunlight"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con luz de sol cálida"
+          }
+        }
+      }
+    },
+    "artwork.mood.mist": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the mist"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entre niebla"
+          }
+        }
+      }
+    },
+    "artwork.mood.dusk": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At dusk"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al atardecer"
+          }
+        }
+      }
+    },
+    "artwork.prompt.retro": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vinyl record and a glass of orange soda"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un vinilo y un vaso de refresco de naranja"
+          }
+        }
+      }
+    },
+    "artwork.prompt.ocean": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A lighthouse above a rolling sea"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un faro sobre un mar agitado"
+          }
+        }
+      }
+    },
+    "artwork.prompt.fantasy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A golden tower above a sea of clouds"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una torre dorada sobre un mar de nubes"
+          }
+        }
+      }
+    },
+    "artwork.theme.retro": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vintage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retro"
+          }
+        }
+      }
+    },
+    "artwork.theme.ocean": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocean"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Océano"
+          }
+        }
+      }
+    },
+    "artwork.theme.fantasy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fantasy"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fantasía"
+          }
+        }
+      }
+    },
+    "artwork.variantNumber": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cover %lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portada %lld"
+          }
+        }
+      }
+    },
+    "artwork.atmosphere": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atmosphere"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambiente"
+          }
+        }
+      }
+    },
+    "artwork.themes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start with a theme"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empieza con un tema"
+          }
+        }
+      }
+    },
     "error.invalidAlarmTime": {
       "extractionState": "manual",
       "localizations": {
@@ -5636,13 +5891,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "What do you imagine?"
+            "value": "Subject"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Qué te imaginas?"
+            "value": "Motivo"
           }
         }
       }
@@ -5772,13 +6027,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Generates up to four variants using your OpenAI key. Only this description and style are sent."
+            "value": "Generates up to four variants using your OpenAI key. Only the subject and atmosphere are sent with the cover instructions."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Genera hasta cuatro variantes con tu clave de OpenAI. Solo se envían esta descripción y el estilo."
+            "value": "Genera hasta cuatro variantes con tu clave de OpenAI. Solo se envían el motivo y el ambiente con las instrucciones de portada."
           }
         }
       }

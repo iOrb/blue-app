@@ -646,6 +646,10 @@ struct PersistenceTests {
                 #expect(prompt.contains("Invalid action format"))
                 return #"{"action":"lookup","kind":"collection","query":"pelis"}"#
             }
+            if requests == 5 {
+                #expect(prompt.contains("alreadySaved"))
+                return #"{"action":"answer","text":"Solaris añadida."}"#
+            }
             #expect(prompt.contains("candidates"))
             #expect(prompt.contains(films.uuidString))
             return
@@ -653,8 +657,8 @@ struct PersistenceTests {
         } search: { _ in
             []
         }
-        #expect(requests == 4)
-        #expect(result == .message("local.changesSaved"))
+        #expect(requests == 5)
+        #expect(result == .answer("Solaris añadida."))
         #expect(store.records(in: films).map(\.title) == ["Solaris"])
     }
 
@@ -1140,10 +1144,11 @@ struct BackupAndArtworkTests {
             UIColor.systemBlue.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 1200, height: 900))
         }
-        let artwork = try CollectionArtworkService.prepare(data)
+        let artwork = try CollectionArtworkService.prepare(data, generated: true)
         #expect(artwork.jpeg.count <= 1_000_000)
         let image = try #require(UIImage(data: artwork.jpeg))
         #expect(max(image.size.width, image.size.height) <= 768)
+        #expect(image.size.width == image.size.height)
         let store = try LibraryStore(inMemory: true, seed: false)
         let id = try store.createCollection(title: "Cover fixture", fields: [])
         var collection = try #require(store.collection(id))
@@ -1155,12 +1160,13 @@ struct BackupAndArtworkTests {
         #expect(exported.collections.first?.artwork == artwork)
         #expect(throws: BlueError.invalidValue) { try CollectionArtworkService.prepare(Data([1, 2, 3])) }
         let request = try CollectionArtworkService.request(
-            prompt: "Blue forest", style: "Watercolor", model: "gpt-image-2.5-flare", key: "test-key")
+            prompt: "Blue forest", atmosphere: "Moonlight", model: "gpt-image-2.5-flare", key: "test-key")
         let requestData = try #require(request.httpBody)
         let body = try #require(try JSONSerialization.jsonObject(with: requestData) as? [String: Any])
         #expect(request.url?.host == "api.openai.com")
         #expect(body["n"] as? Int == 4)
         #expect(body["output_format"] as? String == "jpeg")
-        #expect((body["prompt"] as? String)?.contains("Blue forest") == true)
+        #expect((body["prompt"] as? String)?.contains("Blue forest. Atmosphere: Moonlight") == true)
+        #expect((body["prompt"] as? String)?.contains("fine film grain") == true)
     }
 }

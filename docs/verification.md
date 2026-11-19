@@ -1,3 +1,14 @@
+# Cover and collection audit — 19 November 2026
+
+- Checked cover selection, image encoding and the collection data path. The previous editor offered a free style choice and automatically selected the first generated result. The revised flow sends two chosen inputs with a fixed treatment and requires an explicit selection. Square artwork and the bundled previews use the existing bounded JPEG format, so the backup snapshot remains compatible.
+- Reviewed tool schemas for connected text and direct voice alongside the library store. Candidate lookup had an unpageable fallback and repeated actions could end a multi-part request early. Tests now cover duplicate mutation recovery, moving a record without losing its fields, rejecting an incompatible destination, and note pin/favorite changes. Existing deletion confirmations, event constraints, and alarm integration ran in the unit suite.
+- `scripts/check.sh` passed with 384 localized keys. `scripts/build.sh Release` and `scripts/build-device.sh` passed.
+- `scripts/test.sh -only-testing:BlueTests -only-testing:BlueUITests/BlueUITests/testCollectionCoverAndIconMenu -only-testing:BlueUITests/BlueUITests/testCollectionSortIconsNumberWheelAndRelaunch` passed on iPhone 17 Pro simulator, with 76 unit tests and two interface tests. Result: `artifacts/Tests-20261119-094745.xcresult`. The rating change survived relaunch.
+- After refining the gallery's layout, `BLUE_DEVICE_NAME='Blue Compact' scripts/test.sh -only-testing:BlueUITests/BlueUITests/testSpanishCoverGallery -only-testing:BlueUITests/BlueUITests/testCollectionCoverAndIconMenu` passed on iPhone 13 mini simulator in Spanish and English. Result: `artifacts/Tests-20261119-095012.xcresult`. Inspected normal-size collection detail and compact gallery screenshots. The final compact Spanish preview is in `artifacts/cover-audit-compact/gallery-es.png`.
+- Live generation with a real OpenAI key, live voice and on-device appearance need separate verification. Provider settings, backup authorization and system permissions continue to use their own UI. This branch has not been distributed to TestFlight.
+
+---
+
 # Physical TestFlight installation confirmed — 19 November 2026
 
 The user confirmed that Blue is installed and working. App Store Connect → All Testers independently showed **Installed 1.0.0 (3)** for the existing internal account, with device **iPhone 13 mini / iOS 27.3**. This supersedes earlier invitation-only and installation-pending notes. The tester initially reported no invitation email; after the re-invite flow the installation succeeded. No Apple-side incident or email-delivery root cause was confirmed.

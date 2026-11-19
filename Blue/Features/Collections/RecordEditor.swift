@@ -35,9 +35,10 @@ struct RecordEditor: View {
                                 save()
                             })
                     )
-                    .font(.title.weight(.bold)).accessibilityIdentifier("recordTitle")
+                    .font(.largeTitle.weight(.bold)).lineLimit(1...3)
+                    .accessibilityIdentifier("recordTitle")
                     if let draft, let collection = store.collection(draft.collectionID) {
-                        PropertyFlow(centered: true, spacing: 14) {
+                        PropertyFlow(centered: true, spacing: 10) {
                             ForEach(
                                 [collection.fields.first { $0.kind == .favorite } ?? .favoriteIndicator]
                                     + collection.fields.filter { $0.kind != .favorite }
@@ -50,7 +51,7 @@ struct RecordEditor: View {
                                     property(field, record: draft)
                                 }
                             }
-                        }.padding(.vertical, 8)
+                        }.padding(.vertical, 10)
                         PlainNoteBody(
                             text: Binding(
                                 get: { markdown },
@@ -66,7 +67,7 @@ struct RecordEditor: View {
                         }
                     }
                     ErrorLine(key: error)
-                }.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 16).frame(
+                }.padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 16).frame(
                     maxWidth: 760, alignment: .leading
                 ).frame(maxWidth: .infinity).blueSheetContentSize()
             }.accessibilityIdentifier("recordEditor").scrollDismissesKeyboard(.interactively)

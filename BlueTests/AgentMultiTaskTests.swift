@@ -42,6 +42,40 @@ struct AgentMultiTaskTests {
         #expect(store.state.events?.first?.repeatDays == [2, 4])
         #expect(store.state.notes.first?.markdown.english == "Después")
     }
+    @Test func canPinAndMoveExistingEntriesWithoutLosingValues() async throws {
+        let store = try LibraryStore(inMemory: true, seed: false)
+        let alarms = AlarmService(store: store, scheduler: FakeScheduler(), notifications: FakeEventNotifications())
+        let field = FieldDefinition(id: "rating", label: .user("Rating"), kind: .rating)
+        let origin = try store.createCollection(title: "Origin", fields: [field])
+        let target = try store.createCollection(title: "Target", fields: [field])
+        let incompatible = try store.createCollection(title: "Incompatible", fields: [])
+        let record = Record(collectionID: origin, title: "Example", values: ["rating": .number(8)])
+        try store.saveRecord(record, expectedRevision: nil)
+        let note = Note(title: .user("Ideas"), markdown: .user("Keep this"))
+        try store.saveNote(note, expectedRevision: nil)
+
+        var blue = ConnectedLibraryAgent(
+            store: store, alarms: alarms, language: .english,
+            selected: ["collection": incompatible, "record": record.id, "note": note.id])
+        let rejected = Data(
+            #"{"action":"update","kind":"record","id":"\#(record.id)","collectionID":"\#(incompatible)"}"#.utf8)
+        await #expect(throws: BlueError.invalidValue) { try await blue.executeVoice(rejected) }
+        #expect(store.record(record.id)?.collectionID == origin)
+
+        blue = ConnectedLibraryAgent(
+            store: store, alarms: alarms, language: .english,
+            selected: ["collection": target, "record": record.id, "note": note.id])
+        let move = Data(#"{"action":"update","kind":"record","id":"\#(record.id)","collectionID":"\#(target)"}"#.utf8)
+        _ = try await blue.executeVoice(move)
+        let pin = Data(#"{"action":"update","kind":"note","id":"\#(note.id)","pinned":true,"favorite":true}"#.utf8)
+        _ = try await blue.executeVoice(pin)
+        #expect(store.record(record.id)?.collectionID == target)
+        #expect(store.record(record.id)?.values["rating"] == .number(8))
+        #expect(store.state.notes.first?.pinned == true)
+        #expect(store.state.notes.first?.favorite == true)
+        #expect(store.state.notes.first?.markdown.english == "Keep this")
+    }
+
 }
 
 struct VoiceTurnRecoveryTests {

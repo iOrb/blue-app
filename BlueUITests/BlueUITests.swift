@@ -269,8 +269,16 @@ final class BlueUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         screenshot(app, "collection-cover-picker")
         app.segmentedControls["artworkMode"].buttons["AI"].tap()
-        XCTAssertTrue(app.textFields["artworkSubject"].waitForExistence(timeout: 5))
+        let subject = app.descendants(matching: .any)["artworkSubject"].firstMatch
+        XCTAssertTrue(subject.waitForExistence(timeout: 5))
+        XCTAssertTrue((subject.value as? String)?.contains("golden tower") == true)
+        app.buttons["coverTheme-space"].tap()
+        XCTAssertFalse((subject.value as? String)?.contains("golden tower") == true)
+        XCTAssertTrue(app.descendants(matching: .any)["coverAtmosphere"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["useCoverTheme"].exists)
         screenshot(app, "collection-ai-cover-picker")
+        app.buttons["useCoverTheme"].tap()
+        XCTAssertTrue(app.buttons["saveCollectionArtwork"].exists)
         app.segmentedControls["artworkMode"].buttons["Icon"].tap()
         app.buttons["collectionSymbol-star"].tap()
         app.buttons["saveCollectionArtwork"].tap()
@@ -280,6 +288,20 @@ final class BlueUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, "star")
         app.buttons["closeSheet"].tap()
+    }
+
+    @MainActor func testSpanishCoverGallery() {
+        let app = launch(arguments: ["--test-collection-cover"])
+        spanish(app)
+        app.buttons["collection-Cover preview"].tap()
+        app.buttons["collectionCover"].tap()
+        let modes = app.segmentedControls["artworkMode"]
+        XCTAssertTrue(modes.waitForExistence(timeout: 5))
+        modes.buttons["IA"].tap()
+        let theme = app.buttons["coverTheme-fantasy"]
+        XCTAssertTrue(theme.waitForExistence(timeout: 5))
+        XCTAssertTrue(theme.label.contains("Fantasía"))
+        screenshot(app, "collection-cover-gallery-es")
     }
 
     @MainActor func testCoverSetupRoutesToAssistant() {

@@ -91,7 +91,9 @@ struct VoiceProtocol: Sendable {
         let string = ["type": "string"]
         let fields: [String: Any] = [
             "id": string, "label": string, "kind": string, "icon": string, "tint": string,
-            "remove": ["type": "boolean"], "options": ["type": "array", "items": string],
+            "optionID": string, "optionLabel": string, "optionIcon": string,
+            "remove": ["type": "boolean"], "showInRow": ["type": "boolean"],
+            "options": ["type": "array", "items": string],
         ]
         return [
             "type": "function", "name": "blue_library",
@@ -106,6 +108,8 @@ struct VoiceProtocol: Sendable {
                     "kind": ["type": "string", "enum": ["collection", "record", "note", "event"]],
                     "id": string, "collectionID": string, "query": string, "offset": ["type": "integer"],
                     "title": string, "body": string, "field": string, "icon": string,
+                    "pinned": ["type": "boolean"], "favorite": ["type": "boolean"],
+                    "removeCover": ["type": "boolean"],
                     "date": ["type": "string", "description": "ISO 8601 date and time with timezone offset."],
                     "hour": ["type": "integer", "minimum": 0, "maximum": 23],
                     "minute": ["type": "integer", "minimum": 0, "maximum": 59],
@@ -165,6 +169,7 @@ struct VoiceProtocol: Sendable {
             A film, series, book or any other saved collection item has kind record.
             To add an item to a collection, look up the collection and use its ID as collectionID when creating the record.
             Lookup returns the open item under open. Use exact field IDs and string values. Ask only if information is missing.
+            Use pinned for notes and collections, favorite for notes and records, and removeCover to remove a collection image when explicitly asked. To move a record use update with its ID and the destination collectionID. Follow candidateNextOffset to inspect more candidates. Lookup can filter by pinned or favorite. For an existing status option use optionID with optionIcon or optionLabel.
             If lookup returns no matches, compare candidates with what the user meant. Refine the query or ask if the match is unclear.
             For multiple requested changes, perform successive tool calls until every task is completed. After each mutation, use the current result before continuing. To rename or edit an existing alarm, lookup kind=event, read its saved data, then update kind=event with the exact ID and only the requested fields. Never create a replacement event for a rename.
             There are no standalone alarms in Blue. Alarm, reminder, appointment and event all mean kind=event.

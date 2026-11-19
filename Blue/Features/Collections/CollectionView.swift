@@ -21,6 +21,7 @@ struct CollectionView: View {
     @Environment(LibraryStore.self) private var store
     @Environment(Localizer.self) private var l
     @Environment(NavigationState.self) private var navigation
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var confirmDelete = false
     @State private var showFilters = false
     @State private var pendingDeletion: Deletion?
@@ -44,7 +45,15 @@ struct CollectionView: View {
                 List {
                     VStack(spacing: 6) {
                         if collection.artwork != nil {
-                            CollectionArtworkView(artwork: collection.artwork, size: 156).padding(.bottom, 12)
+                            Button {
+                                navigation.collectionArtworkID = collection.id
+                            } label: {
+                                CollectionArtworkView(artwork: collection.artwork, size: 156)
+                            }.buttonStyle(BlueRowPress())
+                                .accessibilityLabel(l("artwork.title"))
+                                .accessibilityIdentifier("collectionCover")
+                                .disabled(isSelecting)
+                                .padding(.bottom, 12)
                         }
                         Group {
                             if isSelecting {
@@ -218,13 +227,19 @@ struct CollectionView: View {
     }
 
     private func recordContents(_ record: Record, collection: Collection, showIndicators: Bool = true) -> some View {
-        HStack(spacing: 8) {
+        let layout =
+            typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 6))
+        return layout {
             Text(record.title).font(.body.weight(.medium))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            RecordIndicators(record: record, collection: collection, interactive: false, compact: true)
-                .allowsHitTesting(false)
-                .frame(width: 144).opacity(showIndicators ? 1 : 0).accessibilityHidden(!showIndicators)
-        }.padding(.horizontal, 24).frame(minHeight: 52).contentShape(Rectangle())
+            if showIndicators {
+                RecordIndicators(record: record, collection: collection, interactive: false, compact: true)
+                    .allowsHitTesting(false)
+                    .frame(width: typeSize.isAccessibilitySize ? nil : 128)
+            }
+        }.padding(.horizontal, 20).padding(.vertical, 4).frame(minHeight: 52).contentShape(Rectangle())
     }
 
     private func recordRow(_ record: Record, collection: Collection) -> some View {

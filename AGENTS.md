@@ -6,7 +6,9 @@
 - The latest user direction overrides the starter brief: only notes, collections and calendar; no combined Your Space view. Remove the folder UI and flatten legacy folders while preserving every collection and note. No predefined creation templates. New libraries start empty; demo templates are test fixtures only. Use compact, icon-based controls and show every saved property, including favorites. Custom indicators have a user-defined meaning, emoji/SF Symbol and color shared by rows and details. Inactive indicators are light gray; active indicators are filled with their color. Notes show only an editable title and plain text with line breaks. Preserve existing stored text. Filters are controlled through Blue, without manual icon-filter controls. AI can edit notes, add/remove fields and change collection/property icons; stage removal of nonempty fields for review. Ship English (default) and Spanish (Spain).
 - The assistant is the primary capture and adaptation path: support generic records, inferred collections, requested fields and sourced basic web enrichment. Keep manual editing simple. Enter sends, a tap on the chat backdrop dismisses its keyboard without activating the library beneath it, and microphone dictation is explicit.
 - Preserve user data and drafts. Prefer one complete, verified flow over decorative controls. Never claim an alarm or edit succeeded before the platform/store confirms it.
-- This file follows [Codex project instructions](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Do not introduce delegation requirements or account approval gates here.
+
+## Naming and attribution
+- Use product or task names in branches, commits, pull requests, release notes, and repository attribution. Never mention coding agents, assistants used to develop the app, or automated authorship in those places. Blue is the only assistant name that may appear when referring to the product itself.
 
 ## Ownership and dependency direction
 - `Blue/App`: composition, navigation, settings. Depends on Features, Services, Data, Domain.
@@ -47,7 +49,7 @@ Run from repository root; scripts select `/Applications/Xcode.app/Contents/Devel
 
 Keep `docs/architecture.md`, `docs/design.md`, `docs/release.md`, and `docs/verification.md` aligned with the implementation. The verification report records the exact commands, measurements and remaining physical-device checks for the current delivery.
 
-- Optional collection covers support icons, user-selected photos and explicit OpenAI image generation. Send only the chosen description/style. Folder backups use user-selected security-scoped File Provider directories, include all library data and covers, exclude keys, and must not overwrite another device’s copy or claim bidirectional synchronization.
+- Optional collection covers support icons, user-selected photos and explicit OpenAI image generation. AI covers use exactly two inputs (subject and atmosphere), with a fixed square, grainy finish. Send only those choices with the fixed rendering instructions. Folder backups use user-selected security-scoped File Provider directories, include all library data and covers, exclude keys, and must not overwrite another device’s copy or claim bidirectional synchronization.
 
 ## Complete encrypted backup requirement
 - Treat complete, versioned, encrypted backup and recovery as part of every feature's definition of done. Every new app-owned persistent entity, user preference, integration setting and credential must have an explicit snapshot, migration, restore, and change-trigger strategy with round-trip and compatibility tests. Never silently omit new data.

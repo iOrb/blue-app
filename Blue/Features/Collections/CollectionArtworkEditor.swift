@@ -47,9 +47,10 @@ struct CollectionArtworkEditor: View {
     @State private var originalArtwork: CollectionArtwork?
     @State private var mode = 0
     @State private var subject = ""
-    @State private var style = "illustration"
-    @State private var theme = "abstract"
-    private let themes = ["abstract", "nature", "space", "animals", "city"]
+    @State private var atmosphere = "dusk"
+    @State private var theme = "fantasy"
+    private let themes = ["fantasy", "space", "nature", "city", "ocean", "retro", "animals", "abstract"]
+    private let atmospheres = ["dusk", "mist", "sun", "moon", "neon"]
     @State private var candidates: [CollectionArtwork] = []
     @State private var photo: PhotosPickerItem?
     @State private var generating = false
@@ -59,7 +60,6 @@ struct CollectionArtworkEditor: View {
         "list.bullet", "film", "book", "fork.knife", "music.note", "airplane", "mountain.2", "sparkles", "heart",
         "star", "house", "leaf", "🗿", "🍿", "🎮", "☕️",
     ]
-    private let styles = ["illustration", "photo", "pop", "watercolor"]
     private var changed: Bool { symbol != originalSymbol || artwork != originalArtwork }
 
     var body: some View {
@@ -69,13 +69,15 @@ struct CollectionArtworkEditor: View {
             }
             ScrollView {
                 VStack(spacing: 20) {
-                    CollectionArtworkView(artwork: artwork, symbol: symbol, size: 176)
-                        .accessibilityIdentifier("artworkPreview")
                     Picker(l("artwork.title"), selection: $mode) {
                         Text(l("artwork.icon")).tag(0)
                         Text(l("artwork.photo")).tag(1)
                         Text(l("artwork.ai")).tag(2)
                     }.pickerStyle(.segmented).accessibilityIdentifier("artworkMode")
+                    if mode != 2 || (artwork != nil && artwork != originalArtwork) {
+                        CollectionArtworkView(artwork: artwork, symbol: symbol, size: mode == 2 ? 124 : 160)
+                            .accessibilityIdentifier("artworkPreview")
+                    }
                     if mode == 0 {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 8) {
                             ForEach(symbols, id: \.self) { value in
@@ -108,53 +110,16 @@ struct CollectionArtworkEditor: View {
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }.buttonStyle(BlueRowPress())
                     } else {
-                        Menu {
-                            ForEach(themes, id: \.self) { value in
-                                Button(l("artwork.theme.\(value)")) {
-                                    theme = value
-                                    subject = l("artwork.prompt.\(value)")
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(l("artwork.theme.\(theme)")).underline()
-                                Image(systemName: "chevron.down").font(.caption)
-                            }.frame(minHeight: 44)
-                        }.buttonStyle(BlueRowPress())
-                        TextField(l("artwork.subject"), text: $subject, axis: .vertical).lineLimit(1...3)
-                            .accessibilityIdentifier("artworkSubject")
-                        Menu {
-                            ForEach(styles, id: \.self) { value in
-                                Button(l("artwork.style.\(value)")) { style = value }
-                            }
-                        } label: {
-                            HStack {
-                                Text(l("artwork.style.\(style)")).underline()
-                                Image(systemName: "chevron.down").font(.caption)
-                            }.frame(minHeight: 44)
-                        }.buttonStyle(BlueRowPress())
-                        if !candidates.isEmpty {
-                            HStack(spacing: 12) {
-                                ForEach(candidates) { candidate in
-                                    Button {
-                                        artwork = candidate
-                                    } label: {
-                                        CollectionArtworkView(artwork: candidate, size: 54)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 9).strokeBorder(
-                                                    artwork?.id == candidate.id ? Color.primary : .clear, lineWidth: 2))
-                                    }.buttonStyle(BlueRowPress()).accessibilityLabel(l("artwork.variant"))
-                                }
-                            }
-                        }
+                        coverBuilder
                         if AssistantConnection.key(for: .openai) != nil {
                             Button(action: generate) {
                                 HStack(spacing: 8) {
                                     if generating { ProgressView() } else { Image(systemName: "sparkles") }
                                     Text(l(generating ? "artwork.generating" : "artwork.generate"))
                                 }.frame(maxWidth: .infinity, minHeight: 48)
-                            }.buttonStyle(BlueRowPress()).disabled(
-                                generating || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).disabled(
+                                generating || subject.count > 240
+                                    || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             Text(l("artwork.privacy")).font(.caption).foregroundStyle(.secondary)
                         } else {
                             Button(l("artwork.setup")) {
@@ -175,7 +140,13 @@ struct CollectionArtworkEditor: View {
             originalArtwork = artwork
         }
         .onChange(of: mode) { _, value in
-            if value == 2, subject.isEmpty { subject = l("artwork.prompt.\(theme)") }
+            if value != 1 { photo = nil }
+            if value != 2 {
+                generation?.cancel()
+            } else if subject.isEmpty {
+                subject = l("artwork.prompt.\(theme)")
+            }
+            error = nil
         }
         .onDisappear { generation?.cancel() }
         .task(id: photo) {
@@ -188,6 +159,80 @@ struct CollectionArtworkEditor: View {
                 error = nil
             } catch is CancellationError {} catch { self.error = "artwork.failed" }
         }
+    }
+
+    private var coverBuilder: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(l("artwork.themes")).font(.headline).accessibilityAddTraits(.isHeader)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(themes, id: \.self) { choice in
+                        Button {
+                            theme = choice
+                            subject = l("artwork.prompt.\(choice)")
+                        } label: {
+                            VStack(spacing: 6) {
+                                ZStack(alignment: .topTrailing) {
+                                    Image("CoverTheme-\(choice)").resizable().scaledToFill()
+                                        .frame(width: 68, height: 68)
+                                        .clipShape(.rect(cornerRadius: 13))
+                                    if theme == choice {
+                                        Image(systemName: "checkmark.circle.fill").font(.caption.weight(.bold))
+                                            .foregroundStyle(.white).padding(6)
+                                    }
+                                }.frame(width: 68, height: 68).accessibilityHidden(true)
+                                Text(l("artwork.theme.\(choice)")).font(.caption).fixedSize()
+                            }
+                        }.buttonStyle(BlueRowPress())
+                            .accessibilityAddTraits(theme == choice ? .isSelected : [])
+                            .accessibilityIdentifier("coverTheme-\(choice)")
+                    }
+                }
+            }.scrollIndicators(.hidden)
+            Button {
+                guard let data = UIImage(named: "CoverTheme-\(theme)")?.jpegData(compressionQuality: 0.9)
+                else { return }
+                artwork = CollectionArtwork(jpeg: data)
+                error = nil
+            } label: {
+                Label(l("artwork.useTheme"), systemImage: "photo")
+                    .font(.subheadline.weight(.medium)).frame(minHeight: 44)
+            }.buttonStyle(BlueRowPress())
+                .accessibilityIdentifier("useCoverTheme")
+            VStack(spacing: 0) {
+                TextField(l("artwork.subject"), text: $subject, axis: .vertical).lineLimit(1...3)
+                    .accessibilityIdentifier("artworkSubject")
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                Divider().padding(.horizontal, 14)
+                Picker(l("artwork.atmosphere"), selection: $atmosphere) {
+                    ForEach(atmospheres, id: \.self) { value in
+                        Text(l("artwork.mood.\(value)")).tag(value)
+                    }
+                }.pickerStyle(.menu).tint(.primary)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("coverAtmosphere")
+            }.background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityElement(children: .contain)
+            if !candidates.isEmpty {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 6) {
+                    ForEach(Array(candidates.enumerated()), id: \.element.id) { index, candidate in
+                        Button {
+                            artwork = candidate
+                        } label: {
+                            CollectionArtworkView(artwork: candidate, size: 52)
+                                .overlay(alignment: .bottomTrailing) {
+                                    if artwork?.id == candidate.id {
+                                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.white, .blue)
+                                    }
+                                }
+                        }.buttonStyle(BlueRowPress())
+                            .accessibilityLabel(l.format("artwork.variantNumber", index + 1))
+                            .accessibilityAddTraits(artwork?.id == candidate.id ? .isSelected : [])
+                    }
+                }
+            }
+        }.disabled(generating)
     }
 
     private func close() { if let closeSheet { closeSheet() } else { dismiss() } }
@@ -203,21 +248,18 @@ struct CollectionArtworkEditor: View {
     private func generate() {
         guard let key = AssistantConnection.key(for: .openai), !generating else { return }
         let prompt = subject
-        let selectedStyle =
-            [
-                "illustration": "editorial illustration", "photo": "editorial photography", "pop": "a pop art painting",
-                "watercolor": "a watercolor painting",
-            ][style] ?? style
+        let mood = l("artwork.mood.\(atmosphere)")
         generating = true
         error = nil
         generation = Task {
             defer { generating = false }
             do {
-                let next = try await CollectionArtworkService.generate(prompt: prompt, style: selectedStyle, key: key)
+                let next = try await CollectionArtworkService.generate(prompt: prompt, atmosphere: mood, key: key)
                 try Task.checkCancellation()
                 candidates = next
-                artwork = next.first
-            } catch is CancellationError {} catch { self.error = "artwork.failed" }
+            } catch is CancellationError {} catch {
+                self.error = (error as? BlueError)?.key ?? "artwork.failed"
+            }
         }
     }
 }
