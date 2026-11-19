@@ -1,17 +1,15 @@
 import SwiftUI
 
 struct CalendarView: View {
-    var showAdd = true
     @Environment(Localizer.self) private var l
     @Environment(NavigationState.self) private var navigation
     @Environment(LibraryStore.self) private var store
     @Environment(AlarmService.self) private var alarms
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var month = Date()
-    @State private var showDay = false
-    @State private var showEvent = false
     @State private var selectedEvent: CalendarEvent?
-    @State private var editingAlarm: SavedAlarm?
+    @State private var deletingEvent: CalendarEvent?
+    @State private var confirmDelete = false
     @State private var error: String?
     private var calendar: Calendar {
         var calendar = Calendar.current
@@ -22,141 +20,143 @@ struct CalendarView: View {
     private var monthStart: Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month
     }
-    var body: some View {
-        VStack(spacing: 18) {
-            if !dynamicTypeSize.isAccessibilitySize {
-                HStack {
-                    Text(month.formatted(.dateTime.month(.wide).year().locale(l.locale))).font(.title3.weight(.medium))
-                    Spacer()
-                    QuietButton(key: "calendar.previous", symbol: "chevron.left") { changeMonth(-1) }
-                    QuietButton(key: "calendar.next", symbol: "chevron.right") { changeMonth(1) }
-                    if showAdd {
-                        QuietButton(key: "event.new", symbol: "plus") {
-                            selectedEvent = nil
-                            showEvent = true
-                        }.accessibilityIdentifier("calendarPlus")
-                    }
-                }
-            }
-            if dynamicTypeSize.isAccessibilitySize {
-                DatePicker(
-                    l("alarm.date"),
-                    selection: Binding(get: { navigation.selectedDate }, set: { navigation.selectedDate = $0 }),
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.compact).labelsHidden()
-                .onChange(of: navigation.selectedDate) { _, _ in showDay = true }
-                Button(l.date(navigation.selectedDate)) { showDay = true }.frame(minHeight: 44)
-            } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 8) {
-                    ForEach(0..<7, id: \.self) { offset in
-                        Text(calendar.veryShortStandaloneWeekdaySymbols[(calendar.firstWeekday - 1 + offset) % 7])
-                            .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
-                    }
-                    let offset = (calendar.component(.weekday, from: monthStart) - calendar.firstWeekday + 7) % 7
-                    let count = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
-                    ForEach(0..<(offset + count), id: \.self) { index in
-                        if index < offset {
-                            Color.clear.frame(height: 44)
-                        } else if let date = calendar.date(byAdding: .day, value: index - offset, to: monthStart) {
-                            dayButton(date)
-                        }
-                    }
-                }
-            }
-        }
-        .blueSheet(isPresented: $showDay, title: l.date(navigation.selectedDate)) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        Spacer()
-                        QuietButton(key: "event.new", symbol: "plus") {
-                            selectedEvent = nil
-                            showEvent = true
-                        }
-                    }
-                    ForEach(
-                        (store.state.events ?? []).filter {
-                            calendar.isDate($0.date, inSameDayAs: navigation.selectedDate)
-                        }.sorted { $0.date < $1.date }
-                    ) { event in
-                        Button {
-                            selectedEvent = event
-                            showEvent = true
-                        } label: {
-                            HStack(spacing: 12) {
-                                Circle().fill((IndicatorTint(rawValue: event.color) ?? .blue).color).frame(
-                                    width: 7, height: 7)
-                                Text(event.title).font(.title3.weight(.medium))
-                                Spacer()
-                                if !event.allDay {
-                                    Text(l.time(event.date)).font(.subheadline).foregroundStyle(.secondary)
-                                }
-                            }.frame(minHeight: 54).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                    }
-                    ForEach(alarms.alarms(on: navigation.selectedDate, calendar: calendar)) { alarm in
-                        HStack {
-                            Button {
-                                editingAlarm = alarm
-                            } label: {
-                                Label("\(l.time(alarm.date)) · \(alarm.title)", systemImage: "alarm").frame(
-                                    minHeight: 44)
-                            }.buttonStyle(.plain)
-                            Spacer()
-                            Toggle(
-                                l("alarm.enabled"),
-                                isOn: Binding(
-                                    get: { alarm.enabled },
-                                    set: { enabled in
-                                        Task {
-                                            var changed = alarm
-                                            changed.enabled = enabled
-                                            do { try await alarms.save(changed) } catch {
-                                                self.error = (error as? BlueError ?? .alarmFailed).key
-                                            }
-                                        }
-                                    })
-                            ).labelsHidden()
-                        }
-                    }
-                    ErrorLine(key: error)
-                }.padding(.horizontal, 24)
-            }
-            .blueSheet(isPresented: $showEvent, title: l(selectedEvent == nil ? "event.new" : "event.title")) {
-                EventEditor(existing: selectedEvent, date: navigation.selectedDate)
-            }
-            .blueSheet(
-                isPresented: Binding(get: { editingAlarm != nil }, set: { if !$0 { editingAlarm = nil } }),
-                title: l("alarm.edit")
-            ) {
-                if let editingAlarm { AlarmEditor(existing: editingAlarm, date: editingAlarm.date) }
-            }
-        }
-        .blueSheet(isPresented: Binding(get: { showEvent && !showDay }, set: { showEvent = $0 }), title: l("event.new"))
-        { EventEditor(date: navigation.selectedDate) }
-        .onAppear { month = navigation.selectedDate }
+    private var monthHeading: String {
+        let label = month.formatted(.dateTime.month(.wide).year().locale(l.locale)).lowercased(with: l.locale)
+        return label.prefix(1).uppercased(with: l.locale) + label.dropFirst()
     }
+    var body: some View {
+        let event = selectedEvent
+        List {
+            VStack(spacing: 18) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    HStack {
+                        Text(monthHeading)
+                            .font(.title3.weight(.medium))
+                        Spacer()
+                        QuietButton(key: "calendar.previous", symbol: "chevron.left") { changeMonth(-1) }
+                        QuietButton(key: "calendar.next", symbol: "chevron.right") { changeMonth(1) }
+
+                    }
+                }
+                if dynamicTypeSize.isAccessibilitySize {
+                    DatePicker(
+                        l("alarm.date"),
+                        selection: Binding(get: { navigation.selectedDate }, set: { navigation.selectedDate = $0 }),
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact).labelsHidden()
+                } else {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 8) {
+                        ForEach(0..<7, id: \.self) { offset in
+                            Text(calendar.veryShortStandaloneWeekdaySymbols[(calendar.firstWeekday - 1 + offset) % 7])
+                                .font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+                        }
+                        let offset = (calendar.component(.weekday, from: monthStart) - calendar.firstWeekday + 7) % 7
+                        let count = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
+                        ForEach(0..<(offset + count), id: \.self) { index in
+                            if index < offset {
+                                Color.clear.frame(height: 44)
+                            } else if let date = calendar.date(byAdding: .day, value: index - offset, to: monthStart) {
+                                dayButton(date)
+                            }
+                        }
+                    }
+                }
+            }.blueListRow()
+            dayAgenda
+        }.listStyle(.plain).scrollContentBackground(.hidden)
+            .blueSheet(
+                isPresented: Binding(get: { selectedEvent != nil }, set: { if !$0 { selectedEvent = nil } }),
+                title: "", ownHeader: true, allowsExpansion: false
+            ) {
+                if let event { EventEditor(existing: event, date: event.date) }
+            }
+            .onAppear { month = navigation.selectedDate }
+            .blueConfirmation(isPresented: $confirmDelete, title: l("event.confirmDelete")) {
+                guard let deletingEvent else { return }
+                Task {
+                    do { try await alarms.deleteEvent(deletingEvent) } catch {
+                        self.error = (error as? BlueError ?? .saveFailed).key
+                    }
+                }
+            }
+    }
+    private var dayAgenda: some View {
+        let selected = navigation.selectedDate
+        let events = (store.state.events ?? []).filter { $0.occurs(on: selected, calendar: calendar) }
+            .sorted {
+                ($0.occurrence(on: selected, calendar: calendar) ?? $0.date)
+                    < ($1.occurrence(on: selected, calendar: calendar) ?? $1.date)
+            }
+        return Group {
+            Text(l.date(selected)).font(.headline).accessibilityIdentifier("calendarAgendaTitle")
+            if events.isEmpty {
+                Text(l("calendar.noEvents")).foregroundStyle(.secondary)
+            }
+            ForEach(events) { event in
+                Button {
+                    selectedEvent = event
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle().fill(.blue).frame(width: 6, height: 6).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(event.title)
+                            if let notes = event.notes, !notes.isEmpty {
+                                Text(notes).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                        Spacer()
+                        if !event.repeatDays.isEmpty {
+                            Image(systemName: "repeat").font(.caption).foregroundStyle(.secondary).accessibilityLabel(
+                                l("alarm.repeats"))
+                        }
+                        Text(l.time(event.date)).foregroundStyle(.secondary)
+                    }.frame(minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(BlueRowPress()).accessibilityIdentifier("calendar-event-\(event.title)")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            deletingEvent = event
+                            confirmDelete = true
+                        } label: {
+                            Image(systemName: "trash").accessibilityLabel(l("delete"))
+                        }.tint(.red)
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            deletingEvent = event
+                            confirmDelete = true
+                        } label: {
+                            BlueDeleteLabel()
+                        }
+                    }
+            }
+            ErrorLine(key: error)
+        }.blueListRow()
+    }
+
     private func changeMonth(_ offset: Int) {
         month = calendar.date(byAdding: .month, value: offset, to: monthStart) ?? month
     }
     private func dayButton(_ date: Date) -> some View {
         let selected = calendar.isDate(date, inSameDayAs: navigation.selectedDate)
         let hasItems =
-            (store.state.events ?? []).contains { calendar.isDate($0.date, inSameDayAs: date) }
-            || !alarms.alarms(on: date, calendar: calendar).isEmpty
+            (store.state.events ?? []).contains { $0.occurs(on: date, calendar: calendar) }
         return Button {
             navigation.selectedDate = date
-            showDay = true
         } label: {
-            VStack(spacing: 4) {
-                Text(date.formatted(.dateTime.day().locale(l.locale))).font(.body.monospacedDigit()).lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Circle().fill(hasItems ? (selected ? Color(.systemBackground) : .blue) : .clear).frame(
-                    width: 4, height: 4)
-            }.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+            Text(date.formatted(.dateTime.day().locale(l.locale)))
+                .font(.body.monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+                .frame(width: 36, height: 36)
                 .foregroundStyle(selected ? Color(.systemBackground) : Color.primary)
                 .background { if selected { Circle().fill(Color.primary) } }
+                .overlay(alignment: .bottom) {
+                    if hasItems {
+                        Circle().fill(selected ? Color(.systemBackground) : .blue)
+                            .frame(width: 4, height: 4).padding(.bottom, 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel(l.date(date)).accessibilityIdentifier(
             "day-\(calendar.component(.day, from: date))"
         )
@@ -167,190 +167,198 @@ struct CalendarView: View {
 struct EventEditor: View {
     var existing: CalendarEvent?
     var date: Date
-    @Environment(LibraryStore.self) private var store
-    @Environment(Localizer.self) private var l
-    @Environment(\.dismiss) private var dismiss
-    @State private var draft: CalendarEvent?
-    @State private var saved: CalendarEvent?
-    @State private var error: String?
-    @State private var confirmDelete = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let draft {
-                TextField(l("title"), text: binding(\.title)).font(.title2.weight(.semibold)).accessibilityIdentifier(
-                    "eventTitle")
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        DatePicker(
-                            l("alarm.date"), selection: binding(\.date),
-                            displayedComponents: draft.allDay ? [.date] : [.date, .hourAndMinute])
-                        Toggle(l("event.allDay"), isOn: binding(\.allDay))
-                        HStack(spacing: 0) {
-                            ForEach(IndicatorTint.allCases, id: \.self) { tint in
-                                Button {
-                                    self.draft?.color = tint.rawValue
-                                    save()
-                                } label: {
-                                    Circle().fill(tint.color).frame(width: 18, height: 18).frame(width: 44, height: 44)
-                                        .overlay(
-                                            Circle().stroke(
-                                                draft.color == tint.rawValue ? Color.primary : .clear, lineWidth: 1))
-                                }.accessibilityLabel(l("color.\(tint.rawValue)"))
-                            }
-                        }
-                        Text(l("event.noAlarm")).font(.footnote).foregroundStyle(.tertiary)
-                        if saved != nil { QuietButton(key: "delete", symbol: "minus") { confirmDelete = true } }
-                        ErrorLine(key: error)
-                    }.padding(.top, 10)
-                }
-            }
-        }.padding(.horizontal, 24)
-            .onAppear {
-                guard draft == nil else { return }
-                saved = existing
-                draft =
-                    existing
-                    ?? CalendarEvent(
-                        title: "", date: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: date) ?? date
-                    )
-            }
-            .blueConfirmation(isPresented: $confirmDelete, title: l("event.confirmDelete")) {
-                guard let saved else { return }
-                do {
-                    try store.confirmDeletion(PendingDeletion(kind: "event", id: saved.id, revision: saved.revision))
-                    dismiss()
-                } catch { self.error = (error as? BlueError ?? .saveFailed).key }
-            }
-    }
-    private func binding<T>(_ path: WritableKeyPath<CalendarEvent, T>) -> Binding<T> {
-        Binding(
-            get: { draft![keyPath: path] },
-            set: {
-                draft?[keyPath: path] = $0
-                save()
-            })
-    }
-    private func save() {
-        guard var draft, !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        draft.day = formatter.string(from: draft.date)
-        do {
-            try store.saveEvent(draft, expectedRevision: saved?.revision)
-            saved = store.state.events?.first { $0.id == draft.id }
-            self.draft = saved
-            error = nil
-        } catch { self.error = (error as? BlueError ?? .saveFailed).key }
-    }
-}
-
-struct AlarmEditor: View {
-    var existing: SavedAlarm?
-    var date: Date
     @Environment(AlarmService.self) private var alarms
     @Environment(Localizer.self) private var l
     @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var selectedDate = Date()
-    @State private var weekdays: Set<Int> = []
-    @State private var enabled = true
-    @State private var loaded = false
-    @State private var busy = false
-    @State private var saved: SavedAlarm?
-    @State private var revisionTask: Task<Void, Never>?
+    @Environment(\.blueSheetDismiss) private var sheetDismiss
+    @State private var draft: CalendarEvent?
     @State private var error: String?
-    @State private var confirmDelete = false
+    @State private var finishing = false
+    @State private var timeFeedback = UIImpactFeedbackGenerator(style: .light)
+    @State private var openWheel: ScheduleField?
+    @FocusState private var editingText: TextFieldKind?
+
+    private enum ScheduleField { case date, time }
+    private enum TextFieldKind { case name, notes }
+
     var body: some View {
-        Form {
-            TextField(l("alarm.name"), text: $title).accessibilityIdentifier("alarmTitle")
-            DatePicker(l("alarm.date"), selection: $selectedDate)
-            Toggle(l("alarm.enabled"), isOn: $enabled).accessibilityIdentifier("alarmEnabled")
-            Section(l("alarm.repeat")) {
-                let calendar = l.locale.calendar
-                ForEach(1...7, id: \.self) { day in
-                    Button {
-                        if weekdays.contains(day) { weekdays.remove(day) } else { weekdays.insert(day) }
-                    } label: {
-                        HStack {
-                            Text(calendar.weekdaySymbols[day - 1])
-                            Spacer()
-                            if weekdays.contains(day) { Image(systemName: "checkmark") }
-                        }
-                    }
+        VStack(spacing: 0) {
+            BlueSheetHeader(title: l("event.title"), close: close) {
+                if existing == nil || hasChanges {
+                    BlueDoneButton(action: finish)
+                        .disabled(finishing || draft == nil)
+                        .accessibilityIdentifier("finishEvent")
                 }
             }
-            Section { Text(l("alarm.systemHint")).font(.footnote).foregroundStyle(.secondary) }
-            ErrorLine(key: error)
-            if existing != nil { Button(l("alarm.delete"), role: .destructive) { confirmDelete = true } }
-        }
-        .onChange(of: title) { _, _ in scheduleSave() }
-        .onChange(of: selectedDate) { _, _ in scheduleSave() }
-        .onChange(of: weekdays) { _, _ in scheduleSave() }
-        .onChange(of: enabled) { _, _ in scheduleSave() }
-        .modifier(KeyboardDismissToolbar()).navigationTitle(l(existing == nil ? "alarm.new" : "alarm.edit"))
-        .navigationBarTitleDisplayMode(.inline)
-        .blueConfirmation(isPresented: $confirmDelete, title: l("alarm.confirmDelete")) {
-            Task {
-                guard let saved else { return }
-                revisionTask?.cancel()
-                busy = true
-                do {
-                    try await alarms.delete(saved)
-                    dismiss()
-                } catch { self.error = (error as? BlueError ?? .alarmFailed).key }
-                busy = false
+            if let draft {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        TextField(l("event.name"), text: binding(\.title))
+                            .font(.headline).foregroundStyle(.primary).frame(minHeight: 50)
+                            .focused($editingText, equals: .name).accessibilityIdentifier("eventTitle")
+                        Divider()
+                        scheduleRow(.time, label: "event.time", identifier: "eventTime", value: l.time(draft.date))
+                        if openWheel == .time {
+                            DatePicker(
+                                l("event.time"), selection: scheduleSelection(.time),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden().datePickerStyle(.wheel).environment(\.locale, l.twentyFourHourLocale)
+                            .frame(maxWidth: .infinity)
+                        }
+                        Divider()
+                        scheduleRow(
+                            .date, label: "event.date", identifier: "eventDay",
+                            value: draft.date.formatted(.dateTime.day().month(.abbreviated).year().locale(l.locale)))
+                        if openWheel == .date {
+                            DatePicker(l("event.date"), selection: scheduleSelection(.date), displayedComponents: .date)
+                                .labelsHidden().datePickerStyle(.wheel).environment(\.locale, l.locale)
+                                .frame(maxWidth: .infinity)
+                        }
+                        Divider()
+                        repeatPicker(draft.repeatDays)
+                        Divider()
+                        LabeledContent(l("note.markdown")) {
+                            TextField(
+                                l("event.notesPlaceholder"),
+                                text: Binding(
+                                    get: { self.draft?.notes ?? "" },
+                                    set: { self.draft?.notes = $0.isEmpty ? nil : $0 }),
+                                axis: .vertical
+                            )
+                            .lineLimit(1...8).multilineTextAlignment(.trailing).foregroundStyle(.primary)
+                            .focused($editingText, equals: .notes).accessibilityLabel(l("note.markdown"))
+                            .accessibilityIdentifier("eventNotes")
+                        }
+                        .padding(.vertical, 10).frame(minHeight: 50)
+                        ErrorLine(key: error).padding(.top, 4)
+                    }
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 24).padding(.bottom, 12).blueSheetContentSize()
+                }.scrollDismissesKeyboard(.interactively).disabled(finishing)
             }
         }
+        .interactiveDismissDisabled(finishing)
+        .onChange(of: editingText) { _, field in if field != nil { openWheel = nil } }
         .onAppear {
-            guard !loaded else { return }
-            loaded = true
-            if let existing {
-                saved = existing
-                title = existing.title
-                selectedDate = existing.date
-                weekdays = Set(existing.weekdays)
-                enabled = existing.enabled
-            } else {
-                selectedDate = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: date) ?? date
-                if selectedDate < Date() { selectedDate = Date().addingTimeInterval(3600) }
+            guard draft == nil else { return }
+            let calendar = Calendar.current
+            let morning = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: date) ?? date
+            let soon = Date().addingTimeInterval(1_800)
+            let defaultDate = morning <= Date() && calendar.isDateInToday(date) ? soon : morning
+            draft = existing ?? CalendarEvent(title: "", date: defaultDate)
+        }
+    }
+    private func close() {
+        guard !finishing else { return }
+        if let sheetDismiss { sheetDismiss() } else { dismiss() }
+    }
+    private var hasChanges: Bool {
+        guard let existing, let draft else { return false }
+        return eventTitle(draft.title) != existing.title || draft.notes != existing.notes || draft.date != existing.date
+            || draft.repeatDays != existing.repeatDays
+    }
+    private func eventTitle(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? l("event.title") : title
+    }
+    private func finish() {
+        guard !finishing, var next = draft else { return }
+        next.title = eventTitle(next.title)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        next.day = formatter.string(from: next.date)
+        editingText = nil
+        finishing = true
+        Task {
+            do {
+                try await alarms.saveTimedEvent(next, expectedRevision: existing?.revision)
+                finishing = false
+                close()
+            } catch {
+                finishing = false
+                self.error = (error as? BlueError ?? .saveFailed).key
             }
         }
     }
-    private func scheduleSave() {
-        guard loaded, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if let saved, saved.title == title, saved.date == selectedDate, Set(saved.weekdays) == weekdays,
-            saved.enabled == enabled
-        {
-            return
+    private func scheduleRow(_ field: ScheduleField, label: String, identifier: String, value: String) -> some View {
+        Button {
+            editingText = nil
+            openWheel = openWheel == field ? nil : field
+        } label: {
+            LabeledContent(l(label)) {
+                HStack(spacing: 8) {
+                    Text(value).monospacedDigit()
+                    Image(systemName: openWheel == field ? "chevron.up" : "chevron.down")
+                        .font(.caption2.weight(.semibold)).accessibilityHidden(true)
+                }.foregroundStyle(openWheel == field ? Color.accentColor : Color.secondary)
+            }
+            .frame(minHeight: 50).contentShape(Rectangle())
         }
-        revisionTask?.cancel()
-        revisionTask = Task {
-            do {
-                try await Task.sleep(for: .milliseconds(500))
-                try Task.checkCancellation()
-                revisionTask = nil
-                await save()
-            } catch {}
-        }
+        .accessibilityLabel(l(label))
+        .accessibilityValue(value)
+        .accessibilityIdentifier(identifier)
+        .buttonStyle(BlueRowPress())
     }
-    private func save() async {
-        guard !busy else {
-            scheduleSave()
-            return
-        }
-        busy = true
-        defer { busy = false }
-        let alarm = SavedAlarm(
-            id: saved?.id ?? existing?.id ?? UUID(), title: title, date: selectedDate, weekdays: weekdays.sorted(),
-            enabled: enabled,
-            revision: saved?.revision ?? existing?.revision ?? 0)
-        do {
-            try await alarms.save(alarm)
-            saved = alarm
-            saved?.revision += 1
-            error = nil
-            scheduleSave()
-        } catch { self.error = (error as? BlueError ?? .alarmFailed).key }
+
+    private func repeatPicker(_ selected: [Int]) -> some View {
+        VStack(spacing: 2) {
+            LabeledContent(l("alarm.repeat")) {
+                Text(l.repeatSummary(selected)).foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(
+                    .trailing)
+            }.frame(minHeight: 46).accessibilityIdentifier("eventRepeatSummary")
+            HStack(spacing: 0) {
+                ForEach(l.orderedWeekdays, id: \.self) { day in
+                    let active = selected.contains(day)
+                    Button {
+                        editingText = nil
+                        openWheel = nil
+                        var days = Set(self.draft?.repeatDays ?? [])
+                        if !days.insert(day).inserted { days.remove(day) }
+                        self.draft?.repeatDays = days.sorted()
+                        UISelectionFeedbackGenerator().selectionChanged()
+                    } label: {
+                        Text(String(l.weekday(day).prefix(1)).uppercased(with: l.locale))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 32, height: 32)
+                            .foregroundStyle(active ? Color(.systemBackground) : Color.primary)
+                            .background(active ? Color.primary : Color(.tertiarySystemFill), in: Circle())
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(BlueRowPress(shape: AnyShape(Circle())))
+                    .accessibilityLabel(l.weekday(day))
+                    .accessibilityAddTraits(active ? .isSelected : [])
+                    .accessibilityIdentifier("eventRepeatDay-\(day)")
+                }
+            }
+        }.padding(.bottom, 8)
+    }
+
+    private func scheduleSelection(_ field: ScheduleField) -> Binding<Date> {
+        Binding(
+            get: { draft?.date ?? date },
+            set: { value in
+                guard let current = draft?.date else { return }
+                let calendar = Calendar.current
+                let day = field == .date ? value : current
+                let time = calendar.dateComponents([.hour, .minute], from: field == .time ? value : current)
+                guard
+                    let next = calendar.date(
+                        bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: 0, of: day),
+                    next != current
+                else { return }
+                if field == .time {
+                    timeFeedback.impactOccurred(intensity: 0.9)
+                    timeFeedback.prepare()
+                }
+                draft?.date = next
+            })
+    }
+
+    private func binding<T>(_ path: WritableKeyPath<CalendarEvent, T>) -> Binding<T> {
+        Binding(
+            get: { draft![keyPath: path] },
+            set: { draft?[keyPath: path] = $0 })
     }
 }

@@ -89,6 +89,13 @@ struct Collection: Codable, Hashable, Identifiable, Sendable {
     var symbol: String = "list.bullet"
     var fields: [FieldDefinition]
     var createdAt = Date()
+    var pinned: Bool?
+    var artwork: CollectionArtwork?
+}
+
+struct CollectionArtwork: Codable, Hashable, Identifiable, Sendable {
+    var id = UUID()
+    var jpeg: Data
 }
 
 struct WebSource: Codable, Hashable, Sendable {
@@ -116,6 +123,7 @@ struct Note: Codable, Hashable, Identifiable, Sendable {
     var title: LocalText
     var markdown: LocalText
     var favorite: Bool?
+    var pinned: Bool?
     var revision = 0
     var updatedAt = Date()
 }
@@ -138,7 +146,38 @@ struct CalendarEvent: Codable, Hashable, Identifiable, Sendable {
     var day: String?
     var allDay = false
     var color = "blue"
+    var notes: String?
+    /// Calendar weekday values: Sunday = 1 ... Saturday = 7. Nil is a one-time event.
+    var weekdays: [Int]?
+    var notification: Bool?
     var revision = 0
+
+    var repeatDays: [Int] {
+        get { weekdays ?? [] }
+        set { weekdays = newValue.isEmpty ? nil : newValue.sorted() }
+    }
+
+    func occurs(on day: Date, calendar: Calendar = .current) -> Bool {
+        repeatDays.isEmpty
+            ? calendar.isDate(date, inSameDayAs: day)
+            : repeatDays.contains(calendar.component(.weekday, from: day))
+    }
+
+    func occurrence(on day: Date, calendar: Calendar = .current) -> Date? {
+        guard occurs(on: day, calendar: calendar) else { return nil }
+        let time = calendar.dateComponents([.hour, .minute], from: date)
+        return calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: 0, of: day)
+    }
+
+    func nextOccurrence(after now: Date, calendar: Calendar = .current) -> Date? {
+        guard !repeatDays.isEmpty else { return date > now ? date : nil }
+        let time = calendar.dateComponents([.hour, .minute], from: date)
+        return repeatDays.compactMap { day in
+            calendar.nextDate(
+                after: now, matching: DateComponents(hour: time.hour, minute: time.minute, weekday: day),
+                matchingPolicy: .nextTime)
+        }.min()
+    }
 }
 
 struct PendingDeletion: Codable, Equatable, Sendable {
@@ -159,19 +198,25 @@ struct AssistantSelection: Codable, Equatable, Sendable {
 }
 
 struct LibraryState: Codable, Equatable, Sendable {
-    var formatVersion = 2
+    var formatVersion = 3
     var folders: [Folder] = []
     var collections: [Collection] = []
     var records: [Record] = []
     var notes: [Note] = []
     var alarms: [SavedAlarm] = []
     var events: [CalendarEvent]? = []
+
 }
 
 enum BlueError: Error, Equatable {
     case missing, ambiguous, invalidValue, staleRevision, folderDepth, permissionDenied
-    case alarmFailed, saveFailed, modelUnavailable, cancelled, unsupported, emptyTitle, webUnavailable
+    case alarmFailed, saveFailed, modelUnavailable, cancelled, unsupported, emptyTitle, webUnavailable,
+        webSearchNotConfigured, assistantNotConfigured, assistantCredentials, assistantModelUnavailable,
+        assistantRateLimit, assistantResponseInvalid, notificationPermissionDenied, invalidAlarmTime
     var key: String { "error.\(String(describing: self))" }
+    var requiresAssistantSetup: Bool {
+        self == .assistantNotConfigured || self == .assistantCredentials || self == .assistantModelUnavailable
+    }
 }
 
 struct RecordFilter: Codable, Hashable, Identifiable, Sendable {
@@ -223,6 +268,8 @@ struct CollectionQuery: Codable, Equatable, Sendable {
             let comparison: ComparisonResult
             if sortField == "title" {
                 comparison = lhs.title.compare(rhs.title, options: [.caseInsensitive, .numeric], locale: locale)
+            } else if sortField == "updated" {
+                comparison = lhs.updatedAt.compare(rhs.updatedAt)
             } else {
                 let left = lhs.values[sortField]
                 let right = rhs.values[sortField]
@@ -278,6 +325,9 @@ enum Validation {
     }
     static func collection(_ collection: Collection) throws {
         try icon(collection.symbol)
+        if let artwork = collection.artwork {
+            guard !artwork.jpeg.isEmpty, artwork.jpeg.count <= 1_000_000 else { throw BlueError.invalidValue }
+        }
         guard collection.fields.count <= 12, Set(collection.fields.map(\.id)).count == collection.fields.count else {
             throw BlueError.invalidValue
         }
@@ -320,6 +370,10 @@ enum Validation {
         try title(event.title)
         guard event.date.timeIntervalSinceReferenceDate.isFinite, event.revision >= 0,
             IndicatorTint(rawValue: event.color) != nil
+        else { throw BlueError.invalidValue }
+        guard event.repeatDays.count <= 7, event.repeatDays.allSatisfy({ (1...7).contains($0) }),
+            Set(event.repeatDays).count == event.repeatDays.count,
+            (event.notes?.count ?? 0) <= 20_000
         else { throw BlueError.invalidValue }
         if let day = event.day {
             let formatter = DateFormatter()

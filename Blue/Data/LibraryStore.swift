@@ -26,6 +26,7 @@ enum BlueMigrationPlan: SchemaMigrationPlan {
 @Observable
 final class LibraryStore {
     private(set) var state: LibraryState
+    private(set) var generation = 0
     let container: ModelContainer
     private let context: ModelContext
     private var entities: [String: BlueSchemaV1.StoredItem] = [:]
@@ -43,6 +44,7 @@ final class LibraryStore {
         context.autosaveEnabled = false
         let rows = try context.fetch(FetchDescriptor<BlueSchemaV1.StoredItem>())
         entities = Dictionary(uniqueKeysWithValues: rows.map { ($0.key, $0) })
+        let needsEventMigration = !rows.contains { $0.key == "metadata:eventsVersion" && $0.payload == Data([3]) }
         state = LibraryState()
         let decoder = JSONDecoder()
         for row in rows {
@@ -66,6 +68,31 @@ final class LibraryStore {
             state = Self.flattened(state)
             try persist(state)
         }
+        if needsEventMigration {
+            state = Self.eventsOnly(state)
+            try persist(state)
+        }
+    }
+
+    /// Payload v3: expose legacy standalone alarms as events, preserving IDs and system schedules.
+    static func eventsOnly(_ original: LibraryState) -> LibraryState {
+        var next = original
+        var events = next.events ?? []
+        for alarm in original.alarms {
+            if let index = events.firstIndex(where: { $0.id == alarm.id }) {
+                if events[index].weekdays == nil, !alarm.weekdays.isEmpty {
+                    events[index].weekdays = alarm.weekdays
+                }
+            } else {
+                events.append(
+                    CalendarEvent(
+                        id: alarm.id, title: alarm.title, date: alarm.date,
+                        weekdays: alarm.weekdays.isEmpty ? nil : alarm.weekdays))
+            }
+        }
+        next.events = events
+        next.formatVersion = 3
+        return next
     }
 
     /// Payload migration: remove the legacy container layer without dropping user content.
@@ -99,7 +126,7 @@ final class LibraryStore {
     private func persist(_ state: LibraryState) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        var payloads = ["metadata:initialized": Data([1])]
+        var payloads = ["metadata:initialized": Data([1]), "metadata:eventsVersion": Data([3])]
         func encode<T: Encodable & Identifiable>(_ values: [T], kind: String) throws where T.ID == UUID {
             for value in values { payloads["\(kind):\(value.id.uuidString)"] = try encoder.encode(value) }
         }
@@ -135,55 +162,74 @@ final class LibraryStore {
         try mutation(&next)
         try persist(next)
         state = next
+        generation += 1
     }
 
     func saveEvent(_ event: CalendarEvent, expectedRevision: Int?) throws {
+        try update { try Self.stageEvent(event, expectedRevision: expectedRevision, in: &$0) }
+    }
+
+    static func stageEvent(_ event: CalendarEvent, expectedRevision: Int?, in state: inout LibraryState) throws {
         try Validation.event(event)
-        try update { state in
-            var events = state.events ?? []
-            var saved = event
-            if let index = events.firstIndex(where: { $0.id == event.id }) {
-                guard events[index].revision == expectedRevision else { throw BlueError.staleRevision }
-                saved.revision = events[index].revision + 1
-                events[index] = saved
-            } else {
-                guard expectedRevision == nil, saved.revision == 0 else { throw BlueError.staleRevision }
-                events.append(saved)
-            }
-            state.events = events
+        var events = state.events ?? []
+        var saved = event
+        if let index = events.firstIndex(where: { $0.id == event.id }) {
+            guard events[index].revision == expectedRevision else { throw BlueError.staleRevision }
+            saved.revision = events[index].revision + 1
+            events[index] = saved
+        } else {
+            guard expectedRevision == nil, saved.revision == 0 else { throw BlueError.staleRevision }
+            events.append(saved)
         }
+        state.events = events
     }
 
     func confirmDeletion(_ pending: PendingDeletion) throws {
+        try update { try Self.stageDeletion(pending, in: &$0) }
+    }
+
+    func confirmRecordDeletions(in collectionID: UUID, revisions: [UUID: Int]) throws {
+        guard !revisions.isEmpty else { return }
         try update { state in
-            switch pending.kind {
-            case "record":
-                guard let revision = pending.revision,
-                    state.records.first(where: { $0.id == pending.id })?.revision == revision
-                else { throw BlueError.staleRevision }
-                state.records.removeAll { $0.id == pending.id }
-            case "note":
-                guard let revision = pending.revision,
-                    state.notes.first(where: { $0.id == pending.id })?.revision == revision
-                else { throw BlueError.staleRevision }
-                state.notes.removeAll { $0.id == pending.id }
-            case "event":
-                guard let revision = pending.revision,
-                    state.events?.first(where: { $0.id == pending.id })?.revision == revision
-                else { throw BlueError.staleRevision }
-                state.events?.removeAll { $0.id == pending.id }
-            case "collection":
-                guard let collection = pending.collection, let revisions = pending.recordRevisions,
-                    state.collections.first(where: { $0.id == pending.id }) == collection,
-                    Dictionary(
-                        uniqueKeysWithValues: state.records.filter { $0.collectionID == pending.id }.map {
-                            ($0.id, $0.revision)
-                        }) == revisions
-                else { throw BlueError.staleRevision }
-                state.records.removeAll { $0.collectionID == pending.id }
-                state.collections.removeAll { $0.id == pending.id }
-            default: throw BlueError.invalidValue
-            }
+            let current = state.records.filter { revisions[$0.id] != nil }
+            guard current.count == revisions.count,
+                current.allSatisfy({ record in
+                    record.collectionID == collectionID
+                        && revisions[record.id] == record.revision
+                })
+            else { throw BlueError.staleRevision }
+            state.records.removeAll { revisions[$0.id] != nil }
+        }
+    }
+
+    static func stageDeletion(_ pending: PendingDeletion, in state: inout LibraryState) throws {
+        switch pending.kind {
+        case "record":
+            guard let revision = pending.revision,
+                state.records.first(where: { $0.id == pending.id })?.revision == revision
+            else { throw BlueError.staleRevision }
+            state.records.removeAll { $0.id == pending.id }
+        case "note":
+            guard let revision = pending.revision,
+                state.notes.first(where: { $0.id == pending.id })?.revision == revision
+            else { throw BlueError.staleRevision }
+            state.notes.removeAll { $0.id == pending.id }
+        case "event":
+            guard let revision = pending.revision,
+                state.events?.first(where: { $0.id == pending.id })?.revision == revision
+            else { throw BlueError.staleRevision }
+            state.events?.removeAll { $0.id == pending.id }
+        case "collection":
+            guard let collection = pending.collection, let revisions = pending.recordRevisions,
+                state.collections.first(where: { $0.id == pending.id }) == collection,
+                Dictionary(
+                    uniqueKeysWithValues: state.records.filter { $0.collectionID == pending.id }.map {
+                        ($0.id, $0.revision)
+                    }) == revisions
+            else { throw BlueError.staleRevision }
+            state.records.removeAll { $0.collectionID == pending.id }
+            state.collections.removeAll { $0.id == pending.id }
+        default: throw BlueError.invalidValue
         }
     }
 
@@ -192,23 +238,27 @@ final class LibraryStore {
     func records(in id: UUID) -> [Record] { state.records.filter { $0.collectionID == id } }
 
     func saveRecord(_ record: Record, expectedRevision: Int?) throws {
+        try update { try Self.stageRecord(record, expectedRevision: expectedRevision, in: &$0) }
+    }
+
+    static func stageRecord(_ record: Record, expectedRevision: Int?, in state: inout LibraryState) throws {
         try Validation.title(record.title)
-        guard let collection = collection(record.collectionID) else { throw BlueError.missing }
+        guard let collection = state.collections.first(where: { $0.id == record.collectionID }) else {
+            throw BlueError.missing
+        }
         for (id, value) in record.values {
             guard let field = collection.fields.first(where: { $0.id == id }) else { throw BlueError.invalidValue }
             try Validation.field(field, value: value)
         }
-        try update { state in
-            var saved = record
-            saved.updatedAt = Date()
-            if let index = state.records.firstIndex(where: { $0.id == record.id }) {
-                guard expectedRevision == state.records[index].revision else { throw BlueError.staleRevision }
-                saved.revision = state.records[index].revision + 1
-                state.records[index] = saved
-            } else {
-                guard expectedRevision == nil else { throw BlueError.missing }
-                state.records.append(saved)
-            }
+        var saved = record
+        saved.updatedAt = Date()
+        if let index = state.records.firstIndex(where: { $0.id == record.id }) {
+            guard expectedRevision == state.records[index].revision else { throw BlueError.staleRevision }
+            saved.revision = state.records[index].revision + 1
+            state.records[index] = saved
+        } else {
+            guard expectedRevision == nil else { throw BlueError.missing }
+            state.records.append(saved)
         }
     }
 
@@ -232,24 +282,30 @@ final class LibraryStore {
     }
 
     func saveCollection(_ collection: Collection) throws {
+        try update { try Self.stageCollection(collection, in: &$0) }
+    }
+
+    static func stageCollection(_ collection: Collection, in state: inout LibraryState) throws {
         try Validation.collection(collection)
-        try update { state in
-            guard let index = state.collections.firstIndex(where: { $0.id == collection.id }) else {
-                throw BlueError.missing
+        guard let index = state.collections.firstIndex(where: { $0.id == collection.id }) else {
+            throw BlueError.missing
+        }
+        state.collections[index] = collection
+        for index in state.records.indices where state.records[index].collectionID == collection.id {
+            let old = state.records[index].values
+            state.records[index].values = old.filter { key, value in
+                guard let field = collection.fields.first(where: { $0.id == key }) else { return false }
+                return (try? Validation.field(field, value: value)) != nil
             }
-            state.collections[index] = collection
-            for index in state.records.indices where state.records[index].collectionID == collection.id {
-                let old = state.records[index].values
-                state.records[index].values = old.filter { key, value in
-                    guard let field = collection.fields.first(where: { $0.id == key }) else { return false }
-                    return (try? Validation.field(field, value: value)) != nil
-                }
-                state.records[index].revision += 1
-            }
+            state.records[index].revision += 1
         }
     }
 
     func saveNote(_ note: Note, expectedRevision: Int?) throws {
+        try update { try Self.stageNote(note, expectedRevision: expectedRevision, in: &$0) }
+    }
+
+    static func stageNote(_ note: Note, expectedRevision: Int?, in state: inout LibraryState) throws {
         if note.title.key == nil {
             try Validation.title(note.title.english)
             try Validation.title(note.title.spanish)
@@ -257,17 +313,15 @@ final class LibraryStore {
         guard note.markdown.english.count <= 20_000, note.markdown.spanish.count <= 20_000 else {
             throw BlueError.invalidValue
         }
-        try update { state in
-            var saved = note
-            saved.updatedAt = Date()
-            if let index = state.notes.firstIndex(where: { $0.id == note.id }) {
-                guard expectedRevision == state.notes[index].revision else { throw BlueError.staleRevision }
-                saved.revision += 1
-                state.notes[index] = saved
-            } else {
-                guard expectedRevision == nil else { throw BlueError.missing }
-                state.notes.append(saved)
-            }
+        var saved = note
+        saved.updatedAt = Date()
+        if let index = state.notes.firstIndex(where: { $0.id == note.id }) {
+            guard expectedRevision == state.notes[index].revision else { throw BlueError.staleRevision }
+            saved.revision += 1
+            state.notes[index] = saved
+        } else {
+            guard expectedRevision == nil else { throw BlueError.missing }
+            state.notes.append(saved)
         }
     }
 
@@ -311,7 +365,7 @@ final class LibraryStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let backup = try decoder.decode(LibraryState.self, from: data)
-        guard backup.formatVersion == 2, backup.folders.isEmpty,
+        guard (2...3).contains(backup.formatVersion), backup.folders.isEmpty,
             Set(backup.collections.map(\.id)).count == backup.collections.count,
             Set(backup.records.map(\.id)).count == backup.records.count,
             Set(backup.notes.map(\.id)).count == backup.notes.count

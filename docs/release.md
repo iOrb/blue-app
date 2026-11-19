@@ -1,32 +1,46 @@
-# Run Blue on your own iPhone
+# Blue internal TestFlight delivery
 
-Blue uses your free Apple Account (Personal Team) for direct installation from Xcode. There is no TestFlight workflow, App Store Connect dependency, paid team requirement, or distribution secret. GitHub Actions only verifies the source. The public repository does not contain Apple credentials.
+Current plan (17 November 2026): paid Apple Developer Program, internal TestFlight and Xcode Cloud. No public App Store release is authorized. Keep bundle ID `app.iorb.blue.ios` and the existing team `Z33UY64QQA`; never uninstall the existing app to change delivery. Membership and App Store Connect access are verified. The paid individual membership uses the same team ID as the previous development build. The Apple app record is **Blue by iOrb**, ID **6835902525** (the display name on iPhone remains Blue). The internal **Blue Internal** group has the account holder as its tester, with automatic distribution enabled for ordinary Xcode uploads. Cloud-distributed builds need the workflow post-action configured separately.
 
-## First installation
+## Delivery workflow
 
-1. Open `Blue.xcodeproj` in Xcode. In Xcode → Settings → Apple Accounts, sign in with your existing Apple Account.
-2. With iOS 27 or later, pair without a cable: keep the unlocked iPhone and Mac on the same Wi-Fi, open Xcode → Open Developer Tool → Device Hub, then + → Pair Nearby Device… → iPhone. Keep that sheet open and return to Settings → Privacy & Security → Developer Mode on the iPhone; follow the pairing instructions on both devices. Enter any pairing code only where Apple requests it. For earlier iOS releases, connect a cable for the first pairing and accept Trust This Computer.
-3. On the iPhone, enable Settings → Privacy & Security → Developer Mode and complete the required restart/confirmation. Do this yourself on the device.
-4. Select the **Blue** project → **Blue** target → **Signing & Capabilities**. Keep **Automatically manage signing** enabled. Choose your name **(Personal Team)** from Team. Only the app target needs device signing for a normal Run.
-5. The proposed bundle ID is `app.iorb.blue.ios`. If Xcode says it is unavailable, use a unique identifier such as `app.iorb.blue.personal.<your-suffix>`. Keep it stable after installation so future builds update the same app and preserve its data. Make the same change in `project.yml` before regenerating the project; account/team settings can stay local.
-6. Select your physical iPhone as the run destination and press **⌘R**. Xcode registers the selected device, creates a development profile and installs Blue. If the Signing pane reports that your team has no devices, select the paired iPhone before running so Xcode can register it. If iOS asks to trust your developer identity, follow the device's Settings → General → VPN & Device Management prompt.
+1. Complete local checks (`scripts/check.sh`, `scripts/test.sh`, `scripts/build.sh Release`, `scripts/build-device.sh`) before uploading a build.
+2. Preserve a verified device backup before the first development-to-TestFlight replacement. A matching bundle ID alone is not a guarantee that signing/access groups and all data survive; compare the old and new application identifiers and keychain entitlements. Never delete the existing app as a workaround. Drive backup permission, upload/readback and recovery must be verified separately.
+3. Create or reuse the App Store Connect iOS app for the exact bundle ID. Use English as the primary language and a stable internal SKU (`blue-ios`). The visible app name may need an available variation if Blue is already taken.
+4. In Xcode → Product → Xcode Cloud → Create Workflow, connect only `iOrb/blue-app`. Use the shared BlueCloud scheme (Cloud test configuration excludes live-provider and performance suites at compilation) and a cloud Xcode version compatible with the local toolchain. `ci_scripts/ci_post_clone.sh` verifies localization, formatting and shell syntax without installing dependencies. The committed project is generated locally from `project.yml`. GitHub Actions runs lightweight localization and shell checks on a hosted Linux runner; the old unavailable `xcode-27` runner is removed.
+5. Configure a main-branch trigger with cancellation of superseded runs, simulator unit tests, Release archive for iOS and internal TestFlight distribution after success. Exclude real-provider/bridge and performance suites from routine cloud tests; these require separate opt-in runs. Start cloud build numbering above all existing uploaded builds (initial proposal: 100). Let Xcode Cloud manage subsequent build numbers and signing.
+6. Create an internal testing group, add the existing Apple Account, and enable automatic distribution. Install Apple's TestFlight app on the iPhone, accept the invitation, and enable automatic updates there. New builds still need Apple processing; availability and automatic installation are not instantaneous. TestFlight builds expire after 90 days.
+7. Verify library data, provider credentials, Google connection, voice and real alarms after the first replacement. Test voice on the physical iPhone, outside iPhone Mirroring. TestFlight feedback and Apple crash reports support diagnosis without adding a third-party telemetry SDK; never include private library contents or keys in diagnostics.
 
-No `.p12`, `.p8`, App Store profile, App Store app record, API key or GitHub secret is needed. A simulator build does not need an Apple Account at all.
+Use only the included Xcode Cloud allowance (25 compute hours/month). Do not purchase extra capacity. Repository access grants and any pending legal agreement need the account holder's approval. No App Store Connect API key, `.p8`, `.p12` or GitHub distribution secret is required for Apple-managed Xcode Cloud signing.
 
-Free Personal Team provisioning is temporary. Apple states that App IDs, registered test devices and provisioning profiles expire after seven days; you may need to reconnect and run the app again from Xcode. Keep the bundle ID unchanged and do not delete Blue to refresh signing. Export a backup from Blue Settings before any reinstall that could remove app data.
+## Local fallback
 
-iOS 27 enables wireless first pairing in Device Hub. On iPhone 13 mini, Blue opens local library search because the device lacks Apple Intelligence. Manual collections, notes and calendar work on that phone. See [Apple Intelligence requirements](https://support.apple.com/en-us/121115).
+`scripts/archive.sh` creates a signed Release archive without uploading it. `scripts/upload-testflight.sh <archive>` uploads that verified archive using the existing Xcode account and automatic signing. Export options enforce internal TestFlight only and upload symbols for Apple crash diagnostics. Build numbers must be unique; increase the project version before each subsequent local archive. Xcode Organizer remains an alternative. `scripts/update-iphone.sh` remains a local development fallback; it is not necessary for TestFlight updates. Simulator work does not require signing.
 
-To bring a previously exported collection or note to this device, open Blue Settings and choose **Import collections and notes**. Choose a native Blue version 2 JSON export in Files. Existing collections and notes keep their local edits.
+## Cloud backup scope
 
-## Device checks
+Existing optional Google Drive backup stays independent of TestFlight. It writes one encrypted snapshot per installation, with readback verification and a separate account-protected recovery key; see [backup format](backup-format.md). It is not continuous multi-device synchronization. iCloud automatic backup is not enabled yet: it requires its own container, a recoverable encryption-key lifecycle, restore UI, conflict rules and round-trip tests before activation. Paid membership alone does not implement or verify these behaviors. Do not replace a working backup with an empty or unreadable state.
 
-- Confirm English/Spanish switching while editing a note and with a Blue-applied collection query active. Check collection back/options, ascending/descending sorting, plain-text notes, centered deletion modal, Liquid Glass navigation, the composer immediately above the keyboard, outside-tap dismissal and preserved drafts at the physical keyboard size.
-- Tap a rating, scroll the number picker, dismiss it, terminate Blue and confirm persistence. Create a calendar event through + and check the day sheet after relaunch.
-- On an Apple Intelligence-compatible iPhone with its local model ready, enable Airplane Mode and ask Blue to read Interstellar's rating, then change it. Verify the actual row and relaunch. Also say hello with that item selected, propose a note rewrite without saving, then explicitly accept the proposal. Manual functionality works on iPhones without that model.
-- Create an alarm a few minutes ahead, grant the AlarmKit permission, lock the phone, and verify delivery. Check silent/Focus modes, permission denial, disable/delete, recurrence and time-zone changes. Personal Team installation itself does not establish these behaviors.
-- Review Dynamic Type, VoiceOver reading order, Reduce Motion and keyboard interactions on the real display.
+## Current activation status
 
-On 8 November 2026, Blue 1.0 (build 1) was signed with a Personal Team, installed over Wi-Fi, and launched on a physical iPhone 13 mini running iOS 27.3. The first launch succeeded after the developer profile was trusted on the iPhone.
+The app record and internal tester group are created. The account holder renewed the Xcode session on 18 November 2026. Build 1.0.0 (3), including the new icon, was uploaded successfully using `scripts/upload-testflight.sh artifacts/Blue-20261118-142707.xcarchive`; Apple accepted the upload. App Store Connect now shows build 3 as **Testing**, assigned to **Blue Internal**, with **1 invitation** and 90 days of availability. The new icon appears on the build row. On 19 November the user confirmed successful installation, and App Store Connect showed Installed 1.0.0 (3) on iPhone 13 mini / iOS 27.3. Full library/credential continuity, voice and alarms still require separate checks. Xcode Cloud now recognizes the team and has reached Connect Source Code Repository; GitHub access and the actual workflow are not yet configured. The Apple web session is working; the remaining Cloud setup step needs GitHub sign-in and authorization in Chrome. No completed cloud workflow or iCloud container is claimed. App Store privacy/export declarations and any agreements must reflect the actual app and account before distribution.
 
-Sources: [iOS 27 wireless pairing in Device Hub](https://developer.apple.com/documentation/xcode/pairing-your-devices-with-your-mac), [Apple account and Personal Team limits](https://developer.apple.com/help/account/basics/about-your-developer-account/), [running on devices](https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices), [assigning a team](https://help.apple.com/xcode/mac/current/en.lproj/dev23aab79b4.html).
+Sources: [Xcode Cloud setup](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [TestFlight distribution](https://developer.apple.com/documentation/xcode/distributing-your-xcode-cloud-builds-through-testflight), [included cloud allowance](https://developer.apple.com/xcode-cloud/get-started/).
+
+## Device verification after installation
+
+- Confirm notes, collections, covers and events survive the first replacement and a relaunch.
+- Check saved BYOK credentials and Google sign-in; reauthorize only if needed. Do not assume Keychain access survives a changed signing prefix.
+- Open voice on the physical phone outside iPhone Mirroring; verify microphone input and spoken replies.
+- Create a future event, then change its name/time/repeat. Verify AlarmKit plus notification delivery with the phone locked; permissions remain device-owned.
+- Verify the optional Drive copy by downloading, decrypting and comparing the saved snapshot. A signed-in account alone does not prove upload or recovery.
+- Exercise English/Spanish, text editing, compact display, Dynamic Type and VoiceOver.
+
+## App Store preparation, without publication
+
+Keep the privacy manifest, permission descriptions, app icon and encryption declaration consistent with the actual build. Before any later public release, complete App Store privacy answers, provider-data disclosures, support/privacy URLs, screenshots, review notes and account-specific export compliance. The app currently has no Blue inference server or third-party analytics SDK. BYOK requests and optional Google backups have their own data destinations. No public-release submission is part of this delivery.
+
+## Home-screen icon update
+
+Build 3 contains the new mascot icon. Info.plist resolves marketing/build versions from project settings so each new archive can be distinguished by Apple. Source artwork prompt is in app-icon.md. Once the first internal build is processed and available to the account holder, install TestFlight on the iPhone, accept its invitation, and turn on Automatic Updates in Blue's TestFlight page. TestFlight does not require a local network connection to the development Mac; it requires internet access. Automatic installation is controlled by iOS and is not guaranteed to occur immediately after a push. GitHub pushes alone do not upload an app until the cloud workflow is enabled.

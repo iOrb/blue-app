@@ -89,7 +89,8 @@ struct QuietButton: View {
             Image(systemName: symbol).font(.system(size: 20, weight: .medium))
                 .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }
-        .buttonStyle(.plain).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()).accessibilityLabel(l(key))
+        .buttonStyle(BlueRowPress(shape: AnyShape(Circle())))
+        .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()).accessibilityLabel(l(key))
     }
 }
 
@@ -98,6 +99,39 @@ struct ErrorLine: View {
     @Environment(Localizer.self) private var l
     var body: some View {
         if let key { Text(l(key)).font(.footnote).foregroundStyle(.red).accessibilityIdentifier("errorMessage") }
+    }
+}
+
+struct BlueTrashIcon: View {
+    // Native menus may ignore the tint on a vector symbol.
+    private static let image: UIImage? = {
+        guard let symbol = UIImage(systemName: "trash") else { return nil }
+        return UIGraphicsImageRenderer(size: symbol.size).image { context in
+            let bounds = CGRect(origin: .zero, size: symbol.size)
+            symbol.draw(in: bounds)
+            context.cgContext.setBlendMode(.sourceIn)
+            context.cgContext.setFillColor(UIColor.systemRed.cgColor)
+            context.cgContext.fill(bounds)
+        }.withRenderingMode(.alwaysOriginal)
+    }()
+
+    var body: some View {
+        if let image = Self.image {
+            Image(uiImage: image).renderingMode(.original)
+        }
+    }
+}
+
+struct BlueDeleteLabel: View {
+    var key = "delete"
+    @Environment(Localizer.self) private var l
+
+    var body: some View {
+        Label {
+            Text(l(key)).foregroundStyle(.red)
+        } icon: {
+            BlueTrashIcon()
+        }
     }
 }
 
@@ -114,5 +148,154 @@ struct KeyboardDismissToolbar: ViewModifier {
                 .accessibilityIdentifier("keyboardDone")
             }
         }
+    }
+}
+
+struct BlueRowPress: ButtonStyle {
+    var shape = AnyShape(RoundedRectangle(cornerRadius: 12))
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                shape.fill(Color.primary.opacity(configuration.isPressed ? 0.09 : 0))
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.09), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    func blueListRow(fullWidth: Bool = false) -> some View {
+        listRowInsets(EdgeInsets(top: 2, leading: fullWidth ? 0 : 24, bottom: 2, trailing: fullWidth ? 0 : 24))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+}
+
+struct BlueRowTarget: ViewModifier {
+    let onHold: (CGRect) -> Void
+    @State private var frame = CGRect.zero
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) {
+                $0.frame(in: .global)
+            } action: {
+                frame = $0
+            }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.43).onEnded { _ in
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                    onHold(frame)
+                })
+    }
+}
+
+struct BlueEdgeFade: View {
+    let top: CGFloat
+    let bottom: CGFloat
+    var topOpacity: Double = 0
+    var bottomOpacity: Double = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            let height = max(1, geometry.size.height)
+            let topEnd = min(top / height, 0.5)
+            let bottomFraction = min(bottom / height, 0.5)
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(topOpacity), location: 0),
+                    .init(color: .black.opacity(topOpacity + (1 - topOpacity) * 0.16), location: topEnd * 0.25),
+                    .init(color: .black, location: topEnd),
+                    .init(color: .black, location: 1 - bottomFraction),
+                    .init(
+                        color: .black.opacity(bottomOpacity + (1 - bottomOpacity) * 0.84),
+                        location: 1 - bottomFraction * 0.75),
+                    .init(
+                        color: .black.opacity(bottomOpacity + (1 - bottomOpacity) * 0.16),
+                        location: 1 - bottomFraction * 0.25),
+                    .init(color: .black.opacity(bottomOpacity), location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+        }
+    }
+}
+
+struct BlueRowMenu<Actions: View>: View {
+    let frame: CGRect
+    var menuWidth: CGFloat = 232
+    let dismiss: () -> Void
+    @ViewBuilder var actions: () -> Actions
+    @Environment(\.displayScale) private var displayScale
+    @State private var actionHeight: CGFloat = 88
+
+    var body: some View {
+        GeometryReader { geometry in
+            let origin = geometry.frame(in: .global).origin
+            let row = frame.offsetBy(dx: -origin.x, dy: -origin.y)
+            let rowY = row.midY
+            let menuHeight = min(actionHeight + 8, max(52, geometry.size.height * 0.48))
+            let distance = frame.height / 2 + menuHeight / 2 + 9
+            let bottom = rowY + distance + menuHeight / 2
+            let preferredY = bottom > geometry.size.height - 10 ? rowY - distance : rowY + distance
+            let menuY = min(max(menuHeight / 2, preferredY), geometry.size.height - menuHeight / 2)
+            ZStack {
+                Path { path in
+                    path.addRect(CGRect(origin: .zero, size: geometry.size))
+                    path.addRect(row.intersection(CGRect(origin: .zero, size: geometry.size)))
+                }
+                .fill(.black.opacity(0.20), style: FillStyle(eoFill: true))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                Color.clear
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismiss)
+                    .accessibilityHidden(true)
+                VStack(spacing: 0) {
+                    Rectangle().frame(height: 1 / displayScale)
+                    Spacer(minLength: 0)
+                    Rectangle().frame(height: 1 / displayScale)
+                }
+                .foregroundStyle(Color(uiColor: .separator))
+                .frame(width: frame.width, height: frame.height)
+                .position(x: row.midX, y: rowY)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0, content: actions)
+                        .buttonStyle(BlueMenuPress())
+                        .onGeometryChange(for: CGFloat.self) {
+                            $0.size.height
+                        } action: {
+                            actionHeight = $0
+                        }
+                        .padding(.vertical, 4)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(width: min(geometry.size.width - 24, menuWidth), height: menuHeight)
+                .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .position(x: geometry.size.width / 2, y: menuY)
+            }
+            .accessibilityAction(.escape, dismiss)
+        }
+        .transition(.identity)
+    }
+}
+
+private struct BlueMenuPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(configuration.role == .destructive ? Color.red : Color.primary)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, 16)
+            .background(
+                configuration.isPressed ? Color.primary.opacity(0.09) : .clear,
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .contentShape(Rectangle())
     }
 }

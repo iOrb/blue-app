@@ -5,19 +5,26 @@ options:
     iOS: '26.0'
   developmentLanguage: en
   knownRegions: [en, es, Base]
+configs:
+  Debug: debug
+  Release: release
+  Cloud: debug
 settings:
+  configs:
+    Cloud:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG CLOUD_VERIFICATION"
   base:
     SWIFT_VERSION: '6.0'
     SWIFT_STRICT_CONCURRENCY: complete
     IPHONEOS_DEPLOYMENT_TARGET: '26.0'
     TARGETED_DEVICE_FAMILY: '1'
     MARKETING_VERSION: '1.0.0'
-    CURRENT_PROJECT_VERSION: '1'
+    CURRENT_PROJECT_VERSION: '3'
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: NO
-    DEVELOPMENT_TEAM: ''
+    DEVELOPMENT_TEAM: Z33UY64QQA
 targets:
   Blue:
     type: application
@@ -28,14 +35,19 @@ targets:
     info:
       path: Blue/Resources/Info.plist
       properties:
+        GIDClientID: 986940080652-n0h197enieffheihatctvnva4n19vs20.apps.googleusercontent.com
+        CFBundleURLTypes:
+          - CFBundleURLName: Google OAuth
+            CFBundleURLSchemes: [com.googleusercontent.apps.986940080652-n0h197enieffheihatctvnva4n19vs20]
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleDisplayName: Blue
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, es]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSAlarmKitUsageDescription: Blue schedules the alarms you create, even when your iPhone is locked.
-        NSMicrophoneUsageDescription: Blue uses the microphone only when you tap it to dictate a request.
-        NSSpeechRecognitionUsageDescription: Blue transcribes your voice on this device so you can edit and send it.
+        NSMicrophoneUsageDescription: Blue uses the microphone for voice conversations and dictation you start.
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
@@ -70,5 +82,15 @@ schemes:
       gatherCoverageData: true
     profile:
       config: Release
+    archive:
+      config: Release
+  BlueCloud:
+    build:
+      targets:
+        Blue: all
+    test:
+      config: Cloud
+      targets: [BlueTests]
+      gatherCoverageData: true
     archive:
       config: Release

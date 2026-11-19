@@ -27,12 +27,14 @@ enum LibrarySection: String {
 final class NavigationState {
     var section: LibrarySection = .collections
     var path: [Route] = []
-    var pendingAssistant = false
+    var unnamedNoteTitle = ""
+    var unnamedNoteBody = ""
+    var unnamedRecords: [UUID: Record] = [:]
+    var deletingRecordsIn: UUID?
     var detail: Route?
-    var presentations: Set<UUID> = []
     func open(_ route: Route) {
         switch route {
-        case .record, .newRecord, .note, .newNote: detail = route
+        case .record, .newRecord: detail = route
         default: path.append(route)
         }
     }
@@ -41,7 +43,11 @@ final class NavigationState {
     var highlightedAlarm: UUID?
     var queries: [UUID: CollectionQuery] = [:]
     var noticeKey: String?
-    var assistantFocused = false
+    var keyboardVisible = false
+    var settingsPresented = false
+    var collectionArtworkID: UUID?
+    var artworkRequestsSetup = false
+    var assistantSetupRequested = false
     var assistantExpanded = false
     func jump(to record: Record, store: LibraryStore, locale: Locale) {
         section = .collections

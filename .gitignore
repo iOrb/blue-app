@@ -17,3 +17,7 @@ __pycache__/
 .build-profile/
 
 .build-device/
+.blue-personal-team
+.blue-iphone-target
+
+.build-cloud/

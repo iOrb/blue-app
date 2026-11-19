@@ -2,11 +2,12 @@ import Foundation
 import FoundationModels
 import Observation
 
-@Generable enum AssistantArea { case records, collections, notes, alarms, calendar, capture, adapt, schema }
+@Generable enum AssistantArea { case records, collections, notes, calendar, capture, adapt, schema }
 
 enum CharacterState: String { case idle, listening, thinking, searching, working, success, error }
 enum AssistantResult: Codable, Equatable, Sendable {
     case answer(String)
+    case clarification(question: String, options: [String])
     case events([UUID])
     case selection(AssistantSelection)
     case confirmDeletion(PendingDeletion)
@@ -17,6 +18,7 @@ enum AssistantResult: Codable, Equatable, Sendable {
     case notes([UUID])
     case alarms([UUID])
     case confirmAlarmDeletion(UUID)
+    case localProposal(LocalAssistantProposal)
     case message(String)
 }
 
@@ -224,43 +226,6 @@ struct CreateCollectionTool: Tool {
     }
 }
 
-struct ManageAlarmsTool: Tool {
-    let name = "manageAlarms"
-    let description =
-        "Find alarms on an ISO8601 date, create an alarm, or propose deletion for user confirmation. Creation requires an explicit date and time."
-    let context: ToolContext
-    @Generable struct Arguments {
-        @Guide(description: "find, create, delete") var action: String
-        var title: String
-        var dateISO8601: String
-        var alarmID: String?
-        @Guide(description: "Calendar weekdays 1 Sunday to 7 Saturday; empty for one-time") var weekdays: [Int]
-    }
-    func call(arguments: Arguments) async throws -> String { try await perform(arguments) }
-    @MainActor private func perform(_ arguments: Arguments) async throws -> String {
-        try context.check(mutation: arguments.action != "find")
-        if arguments.action == "delete" {
-            guard let raw = arguments.alarmID, let id = UUID(uuidString: raw),
-                context.store.state.alarms.contains(where: { $0.id == id })
-            else { throw BlueError.missing }
-            context.result = .confirmAlarmDeletion(id)
-            return "Deletion awaits explicit user confirmation."
-        }
-        guard let date = ISO8601DateFormatter().date(from: arguments.dateISO8601) else { throw BlueError.invalidValue }
-        if arguments.action == "find" {
-            let matches = Array(context.alarms.alarms(on: date).prefix(12))
-            context.result = .alarms(matches.map(\.id))
-            return String(decoding: try JSONEncoder().encode(matches), as: UTF8.self)
-        }
-        guard arguments.action == "create" else { throw BlueError.unsupported }
-        let alarm = SavedAlarm(title: arguments.title, date: date, weekdays: arguments.weekdays, enabled: true)
-        try await context.alarms.save(alarm)
-        context.didMutate = true
-        context.result = .alarms([alarm.id])
-        return "Scheduled alarm \(alarm.id.uuidString)."
-    }
-}
-
 struct FindNotesTool: Tool {
     let name = "findNotes"
     let description = "Find local Markdown notes by title or body."
@@ -291,6 +256,9 @@ struct FindNotesTool: Tool {
 @MainActor
 @Observable
 final class AssistantService {
+    #if os(iOS)
+        let liveVoice = LiveVoiceService()
+    #endif
     var input = ""
     var result: AssistantResult?
     var state: CharacterState = .idle
@@ -301,9 +269,11 @@ final class AssistantService {
     private(set) var selectedCollection: UUID?
     private(set) var selectedNote: UUID?
     private(set) var selectedEvent: UUID?
-    private var modelFailureKey: String?
     private(set) var history: [AssistantExchange] = []
     private(set) var activePrompt: String?
+    private(set) var streamingText = ""
+    private(set) var localProgressKey: String?
+    private var localApplyID: UUID?
     func restoreConversation(_ exchanges: [AssistantExchange]) { history = AssistantExchange.bounded(exchanges) }
     let testMode: Bool
     init(testMode: Bool = false) { self.testMode = testMode }
@@ -311,31 +281,98 @@ final class AssistantService {
         private let testingLibrarySearch = ProcessInfo.processInfo.arguments.contains("--test-library-search")
     #endif
     var usesLibrarySearch: Bool {
-        if testMode { return false }
         #if DEBUG
-            if testingLibrarySearch { return true }
+            testingLibrarySearch
+        #else
+            false
         #endif
-        #if DEBUG && targetEnvironment(simulator)
-            if SimulatorModelBridge.isConfigured { return false }
-        #endif
-        return !SystemLanguageModel.default.isAvailable
     }
-    var availabilityKey: String {
-        if testMode { return "assistant.testMode" }
-        #if DEBUG
-            if testingLibrarySearch { return "assistant.deviceNotEligible" }
-        #endif
-        #if DEBUG && targetEnvironment(simulator)
-            if SimulatorModelBridge.isConfigured { return "assistant.macBridge" }
-        #endif
-        if let modelFailureKey { return modelFailureKey }
-        switch SystemLanguageModel.default.availability {
-        case .available: return "assistant.onDevice"
-        case .unavailable(.appleIntelligenceNotEnabled): return "assistant.enableIntelligence"
-        case .unavailable(.deviceNotEligible): return "assistant.deviceNotEligible"
-        case .unavailable(.modelNotReady): return "assistant.modelNotReady"
-        default: return "assistant.unavailable"
+    enum ConnectionStatus {
+        case checking, ready, needsSetup, unavailable
+    }
+
+    private(set) var connectionStatus: ConnectionStatus = .checking
+    private var connectionCheck:
+        (
+            connection: AssistantConnection, status: ConnectionStatus, time: ContinuousClock.Instant,
+            requestRejected: Bool
+        )?
+
+    func refreshConnection() async {
+        if testMode || usesLibrarySearch {
+            connectionStatus = .ready
+            return
         }
+        #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--test-rejected-assistant-key") {
+                let fixture = AssistantConnection(provider: .openai, model: "gpt-5-mini", key: "test")
+                await checkConnection(fixture) { _ in throw BlueError.assistantCredentials }
+                return
+            }
+        #endif
+        guard let connection = AssistantConnection.configured() else {
+            connectionStatus = .needsSetup
+            return
+        }
+        connectionStatus = connectionCheck?.connection == connection ? connectionCheck?.status ?? .ready : .ready
+    }
+
+    func checkConnection(
+        _ connection: AssistantConnection?,
+        catalog: (AssistantConnection) async throws -> [String] = {
+            try await ConnectedAssistant(connection: $0).modelCatalog()
+        }
+    ) async {
+        guard let connection else {
+            connectionCheck = nil
+            connectionStatus = .needsSetup
+            return
+        }
+        if let check = connectionCheck, check.connection == connection, check.time.duration(to: .now) < .seconds(120) {
+            connectionStatus = check.status
+            return
+        }
+        connectionStatus = .checking
+        do {
+            let available = try await catalog(connection)
+            try Task.checkCancellation()
+            recordCatalog(available, for: connection)
+        } catch {
+            guard !Task.isCancelled else { return }
+            if (error as? BlueError)?.requiresAssistantSetup == true {
+                recordConnection(.needsSetup, for: connection)
+            } else {
+                connectionStatus = .unavailable
+            }
+        }
+    }
+
+    @discardableResult
+    func recordCatalog(_ models: [String], for connection: AssistantConnection) -> Bool {
+        if let check = connectionCheck, check.connection == connection, check.requestRejected,
+            check.time.duration(to: .now) < .seconds(120)
+        {
+            connectionStatus = .needsSetup
+            return false
+        }
+        let available = models.contains(connection.model)
+        recordConnection(available ? .ready : .needsSetup, for: connection)
+        return available
+    }
+
+    func recordConnection(
+        _ status: ConnectionStatus, for connection: AssistantConnection, requestRejected: Bool = false
+    ) {
+        connectionCheck = (connection, status, .now, requestRejected)
+        connectionStatus = status
+    }
+
+    func clearConversation() {
+        cancel()
+        context = nil
+        activePrompt = nil
+        history = []
+        result = nil
     }
     func selectRecord(_ id: UUID) {
         selectedEvent = nil
@@ -362,18 +399,25 @@ final class AssistantService {
     }
     func cancel() {
         context?.active = false
+        context = nil
         task?.cancel()
+        localApplyID = nil
+        localProgressKey = nil
+        streamingText = ""
+        activePrompt = nil
         busy = false
         state = .idle
     }
-    func submit(store: LibraryStore, alarms: AlarmService, language: AppLanguage) {
-        guard !busy, !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        guard input.count <= 2_000 else {
+    func submit(message: String? = nil, store: LibraryStore, alarms: AlarmService, language: AppLanguage) {
+        let prompt = message ?? input
+        guard !busy, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard prompt.count <= 2_000 else {
             result = .message("error.invalidValue")
             return
         }
-        let prompt = input
+        if message == nil { input = "" }
         activePrompt = prompt
+        streamingText = ""
         busy = true
         result = nil
         state = .thinking
@@ -387,6 +431,8 @@ final class AssistantService {
                 if self.context === context {
                     busy = false
                     activePrompt = nil
+                    streamingText = ""
+                    localProgressKey = nil
                     if let completed = context.completedHistory {
                         history = AssistantExchange.bounded(completed)
                     } else if let result {
@@ -408,23 +454,10 @@ final class AssistantService {
                         throw BlueError.modelUnavailable
                     #endif
                 } else {
-                    #if DEBUG && targetEnvironment(simulator)
-                        if SimulatorModelBridge.isConfigured {
-                            let response = try await SimulatorModelBridge.respond(
-                                prompt: prompt, language: language,
-                                previousRecord: previousRecord, collectionID: selectedCollection, noteID: selectedNote,
-                                store: store, surface: surface, selectedDay: selectedDay, eventID: selectedEvent,
-                                history: history)
-                            try context.check()
-                            result = response.result
-                            context.result = response.result
-                            context.didMutate = response.changed
-                            context.completedHistory = response.history
-                        } else {
-                            try await generate(prompt, context: context)
-                        }
-                    #else
+                    #if os(macOS)
                         try await generate(prompt, context: context)
+                    #else
+                        try await respondConnected(prompt, context: context)
                     #endif
                 }
                 try Task.checkCancellation()
@@ -441,11 +474,14 @@ final class AssistantService {
                     if selection.events.count == 1, let id = selection.events.first { selectEvent(id) }
                 }
                 state = .success
-                if input == prompt { input = "" }
             } catch is CancellationError {
                 if self.context === context { state = .idle }
             } catch {
-                guard self.context === context else { return }
+                guard self.context === context, !Task.isCancelled else { return }
+                if (error as? BlueError)?.requiresAssistantSetup == true {
+                    state = .error
+                    return
+                }
                 #if os(macOS)
                     FileHandle.standardError.write(
                         Data(
@@ -458,10 +494,129 @@ final class AssistantService {
                     state = .success
                 } else {
                     let key = Self.errorKey(error)
-                    if key == "assistant.modelNotReady" { modelFailureKey = key }
                     result = .message(key)
                     state = .error
                 }
+            }
+        }
+    }
+    private func respondConnected(_ message: String, context: ToolContext) async throws {
+        guard let connection = AssistantConnection.configured() else {
+            connectionStatus = .needsSetup
+            throw BlueError.assistantNotConfigured
+        }
+        do {
+            context.result = try await requestLibrary(
+                message, connection: connection, store: context.store, alarms: context.alarms,
+                language: context.language,
+                onSearch: {
+                    if self.context === context { self.state = .searching }
+                })
+        } catch {
+            if (error as? BlueError)?.requiresAssistantSetup == true, self.context === context, context.active,
+                !Task.isCancelled, AssistantConnection.configured() == connection
+            {
+                recordConnection(.needsSetup, for: connection, requestRejected: true)
+            }
+            throw error
+        }
+    }
+
+    #if os(iOS)
+        func voiceToolHandler(
+            store: LibraryStore, alarms: AlarmService, language: AppLanguage
+        ) -> (VoiceProtocol.ToolCall) async throws -> String {
+            var agent = libraryAgent(store: store, alarms: alarms, language: language)
+            return { call in
+                let value = try await agent.executeVoice(call.arguments)
+                try Task.checkCancellation()
+                if let details = value.details { return details }
+                guard let output = value.result else { throw BlueError.invalidValue }
+                switch output {
+                case .confirmCollectionChange, .confirmDeletion:
+                    self.result = output
+                    return Localizer(language: language)("voice.reviewInChat")
+                default:
+                    return String(self.summary(output, store: store, language: language).prefix(2_000))
+                }
+            }
+        }
+    #endif
+
+    func appendVoiceExchange(user: String, reply: String) {
+        history = AssistantExchange.bounded(history + [AssistantExchange(user: user, reply: reply)])
+        switch result {
+        case .confirmCollectionChange, .confirmDeletion: break
+        default: result = .answer(reply)
+        }
+    }
+
+    private func libraryAgent(store: LibraryStore, alarms: AlarmService, language: AppLanguage) -> ConnectedLibraryAgent
+    {
+        var selected: [String: UUID] = [:]
+        selected["record"] = previousRecord
+        selected["collection"] = selectedCollection
+        selected["note"] = selectedNote
+        selected["event"] = selectedEvent
+        return ConnectedLibraryAgent(store: store, alarms: alarms, language: language, selected: selected)
+    }
+
+    private func requestLibrary(
+        _ message: String, connection: AssistantConnection, store: LibraryStore, alarms: AlarmService,
+        language: AppLanguage, onSearch: () -> Void = {}
+    ) async throws -> AssistantResult {
+        var agent = libraryAgent(store: store, alarms: alarms, language: language)
+        let client = ConnectedAssistant(connection: connection)
+        return try await agent.run(
+            message, history: history,
+            request: { prompt in
+                try await client.respond(
+                    instructions: ConnectedLibraryAgent.instructions, prompt: prompt, webSearch: false,
+                    libraryAction: true
+                ).text
+            },
+            search: { query in
+                onSearch()
+                return try await PublicFactsService().lookup(title: query, language: language)
+            })
+    }
+    func applyLocalProposal(
+        _ proposal: LocalAssistantProposal, store: LibraryStore, alarms: AlarmService, language: AppLanguage
+    ) {
+        guard !busy, result == .localProposal(proposal) else { return }
+        let id = UUID()
+        localApplyID = id
+        busy = true
+        state = .working
+        if case .publicSearch = proposal {
+            localProgressKey = "local.searchingWeb"
+        } else {
+            localProgressKey = "local.saving"
+        }
+        task = Task {
+            defer {
+                if localApplyID == id {
+                    busy = false
+                    localApplyID = nil
+                    localProgressKey = nil
+                }
+            }
+            do {
+                try Task.checkCancellation()
+                let saved = try await proposal.apply(store: store, language: language, alarms: alarms)
+                guard localApplyID == id else { return }
+                result = saved
+                state = .success
+                if let previous = history.popLast() {
+                    history.append(
+                        AssistantExchange(user: previous.user, reply: summary(saved, store: store, language: language)))
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                guard localApplyID == id else { return }
+                result = .message((error as? BlueError ?? .webUnavailable).key)
+                state = .error
             }
         }
     }
@@ -493,12 +648,19 @@ final class AssistantService {
             }.joined(separator: "\n")
         }
         func events(_ ids: [UUID]) -> String {
-            ids.compactMap { id in store.state.events?.first { $0.id == id } }.map {
-                $0.title + " · " + l.date($0.date) + " · " + l.time($0.date)
+            ids.compactMap { id in store.state.events?.first { $0.id == id } }.map { event in
+                let scheduled =
+                    event.nextOccurrence(after: .now) != nil
+                    && store.state.alarms.contains { $0.id == event.id && $0.enabled }
+                return event.title + " · " + l.date(event.nextOccurrence(after: .now) ?? event.date) + " · "
+                    + l.time(event.date)
+                    + (event.repeatDays.isEmpty ? "" : " · " + l.repeatSummary(event.repeatDays))
+                    + "\n" + l(scheduled ? "event.alertsScheduled" : "event.noAlarm")
             }.joined(separator: "\n")
         }
         switch result {
         case .answer(let text): return text
+        case .clarification(let question, let options): return ([question] + options).joined(separator: "\n")
         case .message(let key): return l(key)
         case .records(let ids, _): return records(ids)
         case .notes(let ids): return notes(ids)
@@ -510,8 +672,14 @@ final class AssistantService {
         case .confirmCollectionChange: return l("field.confirmMigration")
         case .confirmDeletion: return l("delete.confirm")
         case .confirmAlarmDeletion: return l("alarm.confirmDelete")
+        case .localProposal(let proposal): return proposal.preview(l)
         case .alarms(let ids):
-            return store.state.alarms.filter { ids.contains($0.id) }.map(\.title).joined(separator: "\n")
+            return store.state.alarms.filter { ids.contains($0.id) }.map { alarm in
+                if alarm.enabled {
+                    return l.format("alarm.scheduledAt", l.date(alarm.date), l.time(alarm.date))
+                }
+                return l("alarm.disabled")
+            }.joined(separator: "\n")
         }
     }
     private func conversationSession(instructions: String) -> LanguageModelSession {
@@ -574,7 +742,7 @@ final class AssistantService {
         let decisionSession = LanguageModelSession(
             instructions: """
                 Understand the user's intent semantically in any language. Classify the request without relying on command words.
-                Areas: records = read/edit an existing collection item and its values; collections = create/view/filter a collection; notes = standalone Markdown; alarms = actual ringing alarms; calendar = ordinary events/appointments; capture = save a NEW collection item; adapt = enrich an EXISTING item from public sources; schema = add/remove/change collection fields, icons or indicators.
+                Areas: records = read/edit an existing collection item and its values; collections = create/view/filter a collection; notes = standalone Markdown; calendar = events, appointments, reminders and alarms, all the same standard event type with only name, date, time, optional weekly repeat and notes; capture = save a NEW collection item; adapt = enrich an EXISTING item from public sources; schema = add/remove/change collection fields, icons or indicators.
                 A proposed rewrite that must not yet be saved is notes/read with discussion=true. A request to apply a previous proposal is notes/write.
                 Reference examples: "¿Qué puntuación tiene Interstellar?" names a saved entity -> namedEntities. "Añade una cena mañana" creates a new event -> newEntity. "Cambia esa cena" refers to an open event -> openEntity. Only use openEntity when an entity is actually selected.
                 Examples with an open movie record:
@@ -732,8 +900,7 @@ final class AssistantService {
                 ).content)
             return
         }
-        if context.mutationsAllowed, decision.operation == .delete, let target = chosen.first, decision.area != .alarms
-        {
+        if context.mutationsAllowed, decision.operation == .delete, let target = chosen.first {
             _ = try await ProposeDeletionTool(context: context).call(
                 arguments: .init(kind: target.kind, id: target.id.uuidString))
             return
@@ -865,7 +1032,7 @@ final class AssistantService {
             Current date/time: \(Date().ISO8601Format()), timezone \(TimeZone.current.identifier).
             """
         var requestTools: [any Tool] = [ReadLibraryTool(context: context)]
-        if decision.operation == .delete && decision.area != .alarms {
+        if decision.operation == .delete {
             requestTools.append(ProposeDeletionTool(context: context))
         } else {
             switch area {
@@ -893,7 +1060,6 @@ final class AssistantService {
             case .capture:
                 if context.mutationsAllowed { requestTools.append(CaptureItemTool(context: context)) }
             case .calendar: requestTools.append(CalendarEventsTool(context: context))
-            case .alarms: requestTools.append(ManageAlarmsTool(context: context))
             }
         }
         if decision.operation == .read, chosen.count == 1, chosen[0].kind != .collection, context.result != nil {
