@@ -1,3 +1,13 @@
+# TestFlight availability confirmed — 19 November 2026
+
+App Store Connect visibly confirms version 1.0.0, build 3 (Internal), status **Testing**, group **Blue Internal**, **1 invite**, and **Expires in 90 days**. The build row displays the new mascot icon. This supersedes earlier Processing/authentication-pending notes. Screenshot evidence is saved locally at `/tmp/blue-testflight-ready.png`. The upload was completed on 18 November; availability was observed before this report.
+
+The iPhone does not need to be paired with the Mac or share its Wi-Fi for TestFlight delivery. Installing TestFlight and accepting the Apple invitation are device-side steps. No physical TestFlight install, cellular transfer, data preservation during replacement, voice or alarm check is claimed.
+
+Future automatic source-to-TestFlight delivery is still incomplete: Xcode Cloud recognizes the paid team and is waiting for the GitHub browser login/installation flow. No repository grant, workflow or extra cloud capacity was activated. The ordinary upload was distributed through the already configured internal group; a future Cloud workflow must separately configure its distribution post-action.
+
+---
+
 # Successful Apple upload — 18 November 2026
 
 - The account holder signed into Xcode; Apple Accounts now shows the existing account/team.
