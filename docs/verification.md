@@ -1,3 +1,11 @@
+# Physical TestFlight installation confirmed — 19 November 2026
+
+The user confirmed that Blue is installed and working. App Store Connect → All Testers independently showed **Installed 1.0.0 (3)** for the existing internal account, with device **iPhone 13 mini / iOS 27.3**. This supersedes earlier invitation-only and installation-pending notes. The tester initially reported no invitation email; after the re-invite flow the installation succeeded. No Apple-side incident or email-delivery root cause was confirmed.
+
+This verifies the TestFlight installation of build 3, not cellular transfer specifically, preservation of every prior record/credential, voice or AlarmKit behavior. Those checks remain separate. Automatic source-to-TestFlight builds remain pending GitHub authorization/workflow setup; TestFlight automatic updates can be enabled on the phone for subsequently distributed builds.
+
+---
+
 # TestFlight availability confirmed — 19 November 2026
 
 App Store Connect visibly confirms version 1.0.0, build 3 (Internal), status **Testing**, group **Blue Internal**, **1 invite**, and **Expires in 90 days**. The build row displays the new mascot icon. This supersedes earlier Processing/authentication-pending notes. Screenshot evidence is saved locally at `/tmp/blue-testflight-ready.png`. The upload was completed on 18 November; availability was observed before this report.
